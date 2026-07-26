@@ -389,21 +389,23 @@ class DoomScrollAlert(Alert):
 
 
 class LongFormAlert(Alert):
-    """b) Visits to one site spaced 10-90 min apart, sustained > 1.5 hours.
-    YouTube Shorts are identified by URL and excluded, so they neither count
-    towards nor interrupt a long-form (non-Short YouTube video) session."""
+    """b) Long-form YouTube watching: visits to non-Short YouTube URLs,
+    chained into a session as long as consecutive views are no more than
+    2 hours apart. youtube.com and m.youtube.com are treated as the same
+    site for this grouping."""
 
     name = "long_form"
 
-    def __init__(self, min_gap=timedelta(minutes=10), max_gap=timedelta(minutes=90),
-                 min_duration=timedelta(hours=1.5)):
-        self.min_gap = min_gap
+    def __init__(self, max_gap=timedelta(hours=2)):
         self.max_gap = max_gap
-        self.min_duration = min_duration
 
     def evaluate(self, visits):
-        candidates = [v for v in visits if not _is_youtube_short(v)]
-        return _sessions_for_condition(candidates, lambda gap: self.min_gap < gap < self.max_gap, self.min_duration)
+        candidates = [
+            Visit(v.url, "youtube", v.time, v.title, v.browser)
+            for v in visits
+            if v.domain in YOUTUBE_DOMAINS and not _is_youtube_short(v)
+        ]
+        return _sessions_for_condition(candidates, lambda gap: gap <= self.max_gap, timedelta())
 
 
 class OffTopicAlert(Alert):
@@ -528,7 +530,7 @@ class AlertManager:
         return self._report_duration_alert("doom_scroll", "Doom-scrolling", visits, hours)
 
     def report_long_form(self, visits, hours: float = 24):
-        """b) Report long-form content watching periods (occasional same-site visits)."""
+        """b) Report long-form YouTube watching periods (non-Short views chained by gaps <= 2 hours)."""
         return self._report_duration_alert("long_form", "Long-form content watching", visits, hours)
 
     def report_off_topic(self, visits, hours: float = 24):
@@ -536,7 +538,8 @@ class AlertManager:
         periods = self.alerts["off_topic"].evaluate(visits)
         print(f"Off-topic visits in the past {_format_period(hours)}: {len(periods)}")
         counts = Counter((p.start.date(), p.domain) for p in periods)
-        for (day, domain), count in sorted(counts.items()):
+        counts = Counter({key: count for key, count in counts.items() if count >= 10})
+        for (day, domain), count in sorted(counts.items(), key=lambda item: (item[0][0], -item[1], item[0][1])):
             print(f"  {day} {domain}: {count} visit{'s' if count != 1 else ''}")
         return periods
 
