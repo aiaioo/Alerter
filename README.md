@@ -164,7 +164,7 @@ Each match is a `Period(domain, start, end, visit_count)`, except for
 
 Pass `excluded_domains` to `AlertManager` to filter out visits to certain
 domains (and their subdomains) before *any* alert sees them -- e.g. sites
-you use for work or job-hunting that would otherwise look like
+you use for work, job-hunting, or learning that would otherwise look like
 doom-scrolling or off-topic browsing:
 
 ```python
@@ -172,11 +172,12 @@ manager = AlertManager(alerter, excluded_domains={"linkedin.com", "google.com"})
 ```
 
 `alerter.py`'s own `main()` sets this to `EXCLUDED_DOMAINS` (currently
-`linkedin.com`, `mercor.com`, `alignerr.com`, `turing.com`, `gmail.com`, and
-`google.com` -- the last one also covers Google subdomains like
-`mail.google.com` and `docs.google.com`, since matching is by domain suffix).
-This applies to the live check, `evaluate_all`, and the period reports
-alike, since all three read visits through `manager.read_visits(hours)`.
+`linkedin.com`, `mercor.com`, `alignerr.com`, `turing.com`, `gmail.com`,
+`google.com`, `arxiv.org`, `github.com`, and `kaggle.com` -- `google.com`
+also covers Google subdomains like `mail.google.com` and `docs.google.com`,
+since matching is by domain suffix). This applies to the live check,
+`evaluate_all`, and the period reports alike, since all three read visits
+through `manager.read_visits(hours)`.
 
 ### Printed reports
 

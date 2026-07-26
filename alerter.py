@@ -720,10 +720,12 @@ ALERT_MESSAGES = {
     "youtube_limit": "I have detected that you have gone over your YouTube Shorts limit for today.",
 }
 
-# Sites used for work or job-hunting: never flag doom-scrolling, long-form,
-# off-topic, or YouTube-limit alerts for these, no matter how they're used.
+# Sites used for work, job-hunting, or learning: never flag doom-scrolling,
+# long-form, off-topic, or YouTube-limit alerts for these, no matter how
+# they're used.
 EXCLUDED_DOMAINS = {
     "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com",
+    "arxiv.org", "github.com", "kaggle.com",
 }
 
 
