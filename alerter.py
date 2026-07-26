@@ -725,7 +725,7 @@ ALERT_MESSAGES = {
 # they're used.
 EXCLUDED_DOMAINS = {
     "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com",
-    "arxiv.org", "github.com", "kaggle.com",
+    "arxiv.org", "github.com", "kaggle.com", "notion.com",
 }
 
 
