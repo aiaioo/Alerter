@@ -18,6 +18,9 @@ from urllib.parse import urlparse
 
 IS_MAC = sys.platform == "darwin"
 IS_WINDOWS = sys.platform == "win32"
+# Termux (Android) runs on a Linux kernel, so sys.platform is "linux" there too;
+# PREFIX pointing into com.termux's app sandbox is what actually distinguishes it.
+IS_ANDROID = "com.termux" in os.environ.get("PREFIX", "")
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +137,11 @@ class Alerter:
                     dest = self._copy_history_file(src, browser, i)
                     self.copied_files.append((browser, dest))
                 except PermissionError as e:
+                    if browser == "safari":
+                        # Safari's FDA prompt can't be satisfied on this machine
+                        # (the picker won't accept the python3.13 binary), so this
+                        # is expected every run rather than worth logging each time.
+                        continue
                     print(
                         f"Warning: no permission to read {browser} history ({src}). "
                         "On macOS this usually means Terminal/Python needs Full Disk "
@@ -554,11 +562,59 @@ class AlertManager:
         return periods
 
 
-def speak(message: str):
+def _speak_mac(message: str):
     try:
         subprocess.run(["say", message], check=False)
     except FileNotFoundError:
         print(f"[say unavailable] {message}")
+
+
+def _speak_android(message: str):
+    """Termux equivalent of 'say': speaks via termux-tts-speak and also
+    raises a notification, so the alert is noticed even if the phone is
+    silenced or the TTS engine isn't configured. Both come from the
+    termux-api package (pkg install termux-api) plus the Termux:API app."""
+    try:
+        subprocess.run(["termux-tts-speak", message], check=False)
+    except FileNotFoundError:
+        print(f"[termux-tts-speak unavailable] {message}")
+    try:
+        subprocess.run(
+            ["termux-notification", "--title", "Alerter", "--content", message],
+            check=False,
+        )
+    except FileNotFoundError:
+        pass
+
+
+def _speak_windows(message: str):
+    """Windows equivalent of 'say', using the built-in SAPI voice via
+    PowerShell's System.Speech assembly. The message is passed over stdin
+    rather than interpolated into the script string, so it can't break out
+    of the PowerShell command regardless of quotes/special characters."""
+    script = (
+        "Add-Type -AssemblyName System.Speech; "
+        "$t = [Console]::In.ReadToEnd(); "
+        "(New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak($t)"
+    )
+    try:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            input=message, text=True, check=False,
+        )
+    except FileNotFoundError:
+        print(f"[powershell unavailable] {message}")
+
+
+def speak(message: str):
+    if IS_ANDROID:
+        _speak_android(message)
+    elif IS_MAC:
+        _speak_mac(message)
+    elif IS_WINDOWS:
+        _speak_windows(message)
+    else:
+        print(f"[no speech backend for this platform] {message}")
 
 
 ALERT_MESSAGES = {
@@ -595,12 +651,12 @@ def main(period: str = None):
     now = datetime.now()
     hours_since_midnight = (now - datetime.combine(now.date(), datetime.min.time())).total_seconds() / 3600
     active = manager.detect_current(hours=max(3, hours_since_midnight))
-    if len(active) == 1:
+    if len(active) >= 1:
+        if len(active) > 1:
+            print(f"Multiple alerts active at once ({active}); speaking one of them.")
         message = ALERT_MESSAGES.get(active[0], f"I have detected the alert: {active[0]}.")
         print(message)
         speak(message)
-    elif len(active) > 1:
-        print(f"Multiple alerts active at once ({active}); not speaking to avoid ambiguity.")
     else:
         print("No alert condition currently active.")
 
