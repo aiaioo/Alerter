@@ -55,35 +55,41 @@ Windows version, and there's no supported IE install left to test against.
 ## Quick start
 
 ```bash
-python3 alerter.py
+python3 alerter.py             # just the live alert check, no report
+python3 alerter.py day         # also print a report over the last 24 hours
+python3 alerter.py week        # ...over the last 7 days
+python3 alerter.py month       # ...over the last 30 days
 ```
 
-This will:
+Every invocation will:
 
 1. Copy every history database it can find (Chrome, Firefox, Safari, Edge,
    IE) into `./history/`.
-2. Report on all four conditions over the last 24 hours: doom-scrolling and
-   long-form watching as time periods, off-topic browsing as per-domain
-   visit counts, and YouTube Shorts over the daily limit as a per-day count.
+2. If a period (`day`/`week`/`month`) is given, report on all four
+   conditions over that window: doom-scrolling and long-form watching as
+   time periods, off-topic browsing as per-day-per-domain visit counts, and
+   YouTube Shorts over the daily limit as a per-day count. With no period,
+   this step is skipped entirely.
 3. Check whether you are *currently* doom-scrolling, watching long-form
    content, browsing off-topic, or over your YouTube Shorts limit — and if
    exactly one of those is true, speak an alert out loud (e.g. "I have
-   detected that you are doom scrolling.").
+   detected that you are doom scrolling."). This always runs, regardless of
+   whether a report was requested.
 
-Example output:
+Example output for `python3 alerter.py day`:
 
 ```
-Doom-scrolling in the past 24 hours: 6.58 hours
+Doom-scrolling in the past 1 day: 6.58 hours
 Periods:
-  youtube.com: 01:37 - 02:08
-  youtube.com: 18:08 - 20:46
-Long-form content watching in the past 24 hours: 0.00 hours
+  youtube.com: 2026-07-26 01:37 - 02:08
+  youtube.com: 2026-07-26 18:08 - 20:46
+Long-form content watching in the past 1 day: 0.00 hours
 No long-form content watching periods detected.
-Off-topic visits in the past 24 hours: 730
-  youtube.com: 496 visits
-  my.shaadi.com: 72 visits
-  linkedin.com: 38 visits
-YouTube Shorts over the daily limit of 10 in the past 24 hours: 484
+Off-topic visits in the past 1 day: 730
+  2026-07-26 youtube.com: 496 visits
+  2026-07-26 my.shaadi.com: 72 visits
+  2026-07-26 linkedin.com: 38 visits
+YouTube Shorts over the daily limit of 10 in the past 1 day: 484
   2026-07-26: 484 shorts over the limit
 No alert condition currently active.
 ```
@@ -156,15 +162,24 @@ human-readable report, returning the matched `Period`s as well:
 
 ```python
 visits = alerter.read_urls(24)
-manager.report_doom_scrolling(visits)  # total hours + list of HH:MM-HH:MM periods
+manager.report_doom_scrolling(visits)  # total hours + list of dated periods
 manager.report_long_form(visits)       # same, for long-form watching
-manager.report_off_topic(visits)       # visit count per off-topic domain
+manager.report_off_topic(visits)       # visit count per off-topic domain, per day
 manager.report_youtube_limit(visits)   # count of over-the-limit Shorts, per day
 ```
 
 All four take an optional `hours` argument (default `24`) purely to label
-the printed header — pass the same value you used for `read_urls(n)`. This is
-what `main()` calls to produce the report shown in Quick start.
+the printed header (e.g. "in the past 7 days") — pass the same value you
+used for `read_urls(n)`.
+
+### `main(period=None)` and the CLI
+
+`main()` always runs the live alert check. Pass `period="day"`, `"week"`, or
+`"month"` (or run `python3 alerter.py <period>` from the shell) to also print
+the four reports above first, over that window — `PERIOD_HOURS` maps each
+name to an hours count (`day`→24, `week`→168, `month`→720; a month is a
+fixed 30-day window, not a calendar month). Leave it unset for just the
+alert check, with no report.
 
 ### Built-in alerts
 

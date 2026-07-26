@@ -4,6 +4,7 @@ history and raises alerts for doom-scrolling, long-form content watching,
 and off-topic browsing.
 """
 
+import argparse
 import os
 import shutil
 import sqlite3
@@ -459,6 +460,26 @@ class YouTubeLimitAlert(Alert):
 
 
 # ---------------------------------------------------------------------------
+# Reporting periods: day / week / month, expressed in hours for read_urls()
+# ---------------------------------------------------------------------------
+
+PERIOD_HOURS = {
+    "day": 24,
+    "week": 24 * 7,
+    "month": 24 * 30,  # calendar months vary; treated as a fixed 30-day window
+}
+
+
+def _format_period(hours: float) -> str:
+    """Render an hours count as whole days when it divides evenly, since
+    week/month reports read better as '7 days' than '168 hours'."""
+    if hours >= 24 and hours % 24 == 0:
+        days = int(hours // 24)
+        return f"{days} day{'s' if days != 1 else ''}"
+    return f"{hours:g} hours"
+
+
+# ---------------------------------------------------------------------------
 # AlertManager: lets a user configure alerts and check them against history
 # ---------------------------------------------------------------------------
 
@@ -484,40 +505,46 @@ class AlertManager:
         now = datetime.now()
         return [name for name, alert in self.alerts.items() if alert.is_active_now(visits, now, recent_window)]
 
-    def _report_duration_alert(self, alert_name: str, label: str, visits, hours: int):
+    @staticmethod
+    def _format_span(start: datetime, end: datetime) -> str:
+        if start.date() == end.date():
+            return f"{start.strftime('%Y-%m-%d %H:%M')} - {end.strftime('%H:%M')}"
+        return f"{start.strftime('%Y-%m-%d %H:%M')} - {end.strftime('%Y-%m-%d %H:%M')}"
+
+    def _report_duration_alert(self, alert_name: str, label: str, visits, hours: float):
         periods = self.alerts[alert_name].evaluate(visits)
         total_hours = sum((p.duration for p in periods), timedelta()).total_seconds() / 3600
-        print(f"{label} in the past {hours} hours: {total_hours:.2f} hours")
+        print(f"{label} in the past {_format_period(hours)}: {total_hours:.2f} hours")
         if periods:
             print("Periods:")
             for p in periods:
-                print(f"  {p.domain}: {p.start.strftime('%H:%M')} - {p.end.strftime('%H:%M')}")
+                print(f"  {p.domain}: {self._format_span(p.start, p.end)}")
         else:
             print(f"No {label.lower()} periods detected.")
         return periods
 
-    def report_doom_scrolling(self, visits, hours: int = 24):
+    def report_doom_scrolling(self, visits, hours: float = 24):
         """a) Report doom-scrolling periods (repeated, frequent same-site visits)."""
         return self._report_duration_alert("doom_scroll", "Doom-scrolling", visits, hours)
 
-    def report_long_form(self, visits, hours: int = 24):
+    def report_long_form(self, visits, hours: float = 24):
         """b) Report long-form content watching periods (occasional same-site visits)."""
         return self._report_duration_alert("long_form", "Long-form content watching", visits, hours)
 
-    def report_off_topic(self, visits, hours: int = 24):
-        """c) Report visits unrelated to configured learning goals, grouped by domain."""
+    def report_off_topic(self, visits, hours: float = 24):
+        """c) Report visits unrelated to configured learning goals, grouped by domain and day."""
         periods = self.alerts["off_topic"].evaluate(visits)
-        print(f"Off-topic visits in the past {hours} hours: {len(periods)}")
-        counts = Counter(p.domain for p in periods)
-        for domain, count in counts.most_common():
-            print(f"  {domain}: {count} visit{'s' if count != 1 else ''}")
+        print(f"Off-topic visits in the past {_format_period(hours)}: {len(periods)}")
+        counts = Counter((p.start.date(), p.domain) for p in periods)
+        for (day, domain), count in sorted(counts.items()):
+            print(f"  {day} {domain}: {count} visit{'s' if count != 1 else ''}")
         return periods
 
-    def report_youtube_limit(self, visits, hours: int = 24):
+    def report_youtube_limit(self, visits, hours: float = 24):
         """d) Report YouTube Shorts watched beyond the daily limit, grouped by day."""
         periods = self.alerts["youtube_limit"].evaluate(visits)
         limit = self.alerts["youtube_limit"].daily_limit
-        print(f"YouTube Shorts over the daily limit of {limit} in the past {hours} hours: {len(periods)}")
+        print(f"YouTube Shorts over the daily limit of {limit} in the past {_format_period(hours)}: {len(periods)}")
         counts = Counter(p.start.date() for p in periods)
         for day, count in sorted(counts.items()):
             print(f"  {day}: {count} short{'s' if count != 1 else ''} over the limit")
@@ -539,7 +566,9 @@ ALERT_MESSAGES = {
 }
 
 
-def main():
+def main(period: str = None):
+    """Run the live alert check. If period ('day'/'week'/'month') is given,
+    also print a report over that window before checking."""
     alerter = Alerter()
     manager = AlertManager(alerter)
     manager.add_alert(DoomScrollAlert())
@@ -547,13 +576,15 @@ def main():
     manager.add_alert(OffTopicAlert())
     manager.add_alert(YouTubeLimitAlert())
 
-    # Analyse the last 24 hours
-    visits_24h = alerter.read_urls(24)
-
-    manager.report_doom_scrolling(visits_24h)
-    manager.report_long_form(visits_24h)
-    manager.report_off_topic(visits_24h)
-    manager.report_youtube_limit(visits_24h)
+    if period is not None:
+        if period not in PERIOD_HOURS:
+            raise ValueError(f"period must be one of {sorted(PERIOD_HOURS)}, got {period!r}")
+        hours = PERIOD_HOURS[period]
+        visits = alerter.read_urls(hours)
+        manager.report_doom_scrolling(visits, hours=hours)
+        manager.report_long_form(visits, hours=hours)
+        manager.report_off_topic(visits, hours=hours)
+        manager.report_youtube_limit(visits, hours=hours)
 
     # Detect what's happening right now, and speak it if exactly one alert fires.
     # The lookback covers the whole calendar day so far, since the YouTube
@@ -572,4 +603,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Check for active alerts. Optionally also print a report over a day, week, or month."
+    )
+    parser.add_argument("period", nargs="?", default=None, choices=sorted(PERIOD_HOURS),
+                         help="Also print a report over this period (default: no report, just the alert check)")
+    args = parser.parse_args()
+    main(args.period)
