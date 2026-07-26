@@ -15,6 +15,10 @@ browsing history and alerts you to four patterns:
 - **YouTube limit** — once you've watched more than a daily limit (default
   10) of YouTube Shorts (URLs under `/shorts/`) on a calendar day, every
   Short watched after that is flagged.
+- **Calendar reminders** — speaks "You have a scheduled event at &lt;time&gt;"
+  15, 10, and 5 minutes before each timed event on your Google Calendar
+  (all-day events are ignored, since they have no specific time to count
+  down to). Requires `googlecal.py` to be set up; see below.
 
 It works even while the browser is open, by copying the history database
 files before reading them (browsers lock these files while running).
@@ -148,11 +152,31 @@ for name, periods in results.items():
     for p in periods:
         print(name, p.domain, p.start, p.end, p.duration)
 
-# Which alerts are firing right now (last match within the recent window)?
+# Which alerts are firing right now? -> {name: matches}, matches being
+# whatever that alert's active_matches()/evaluate() returns.
 active_now = manager.detect_current(hours=3, recent_window=timedelta(minutes=10))
 ```
 
-Each match is a `Period(domain, start, end, visit_count)`.
+Each match is a `Period(domain, start, end, visit_count)`, except for
+`CalendarAlert`, whose matches are `CalendarReminder`s (see below).
+
+### Excluding domains from every alert
+
+Pass `excluded_domains` to `AlertManager` to filter out visits to certain
+domains (and their subdomains) before *any* alert sees them -- e.g. sites
+you use for work or job-hunting that would otherwise look like
+doom-scrolling or off-topic browsing:
+
+```python
+manager = AlertManager(alerter, excluded_domains={"linkedin.com", "google.com"})
+```
+
+`alerter.py`'s own `main()` sets this to `EXCLUDED_DOMAINS` (currently
+`linkedin.com`, `mercor.com`, `alignerr.com`, `turing.com`, `gmail.com`, and
+`google.com` -- the last one also covers Google subdomains like
+`mail.google.com` and `docs.google.com`, since matching is by domain suffix).
+This applies to the live check, `evaluate_all`, and the period reports
+alike, since all three read visits through `manager.read_visits(hours)`.
 
 ### Printed reports
 
@@ -188,6 +212,7 @@ alert check, with no report.
 | `LongFormAlert` | consecutive same-site visits with gaps in a mid-range window | 10 min < gap < 90 min, sustained > 1.5 hr |
 | `OffTopicAlert` | any visited domain/page not matching your allow-list or keywords | see below |
 | `YouTubeLimitAlert` | any YouTube Shorts visit (`/shorts/...`) once today's count exceeds `daily_limit` | `daily_limit=10` |
+| `CalendarAlert` | a timed Google Calendar event starting in one of `lead_times` | `lead_times=(15, 10, 5)` minutes |
 
 All thresholds are constructor arguments:
 
@@ -195,7 +220,37 @@ All thresholds are constructor arguments:
 DoomScrollAlert(max_gap=timedelta(minutes=10), min_duration=timedelta(minutes=7))
 LongFormAlert(min_gap=timedelta(minutes=10), max_gap=timedelta(minutes=90), min_duration=timedelta(hours=1.5))
 YouTubeLimitAlert(daily_limit=10)
+CalendarAlert(google_cal, lead_times=(timedelta(minutes=15), timedelta(minutes=10), timedelta(minutes=5)))
 ```
+
+### `CalendarAlert`
+
+Speaks "You have a scheduled event at &lt;time&gt;" 15, 10, and 5 minutes
+before each *timed* event on your Google Calendar. All-day events are
+skipped entirely, since they have no specific time to count down to.
+
+```python
+from googlecal import GoogleCal
+from alerter import Alerter, AlertManager, CalendarAlert
+
+manager = AlertManager(Alerter())
+manager.add_alert(CalendarAlert(GoogleCal()))
+```
+
+It takes any object exposing `get_events(time_min, time_max)` (i.e. a
+`GoogleCal`), so `alerter.py` itself never imports `googlecal.py` — that
+import only happens where you wire the two together (`main()` does this
+lazily too, so the browsing alerts still work if `googlecal.py`'s
+dependencies or credentials aren't set up).
+
+Each match is a `CalendarReminder(summary, location, start, lead)`. Because
+a reminder needs to speak details specific to *which* event and *which*
+lead time fired — not a fixed string like the other alerts — `CalendarAlert`
+overrides `speak_message(matches)` instead of using the shared
+`ALERT_MESSAGES` lookup. `catch_window` (default 5 minutes) controls how
+long after a trigger instant it still counts as "now"; it should be at
+least as long as how often you run the live check (e.g. the `*/5 * * * *`
+cron cadence below), so a trigger can't fall between two runs unnoticed.
 
 `YouTubeLimitAlert` identifies a Short by domain (`youtube.com` or
 `m.youtube.com`) plus a URL path starting with `/shorts/`; it counts visits
@@ -244,6 +299,22 @@ class LateNightAlert(Alert):
 manager.add_alert(LateNightAlert())
 ```
 
+By default, the message spoken for an active alert comes from
+`ALERT_MESSAGES[name]`. If your alert needs to speak something specific to
+which match(es) fired (like `CalendarAlert` does), override
+`speak_message(matches)` instead:
+
+```python
+class LateNightAlert(Alert):
+    name = "late_night"
+
+    def evaluate(self, visits):
+        return [Period(v.domain, v.time, v.time, 1) for v in visits if v.time.hour >= 23 or v.time.hour < 5]
+
+    def speak_message(self, matches):
+        return f"You're up late browsing {matches[0].domain}."
+```
+
 ## Spoken alerts
 
 `main()` calls `speak(message)`, which shells out to macOS's `say` command.
@@ -266,6 +337,59 @@ with `cron` or `launchd`, every few minutes:
 ```
 */5 * * * * /usr/bin/python3 /path/to/alerter.py >> /path/to/alerter.log 2>&1
 ```
+
+## `googlecal.py`: Google Calendar reports
+
+`googlecal.py` reads your Google Calendar and reports on appointments for
+the current day, week, or month.
+
+### Requirements
+
+```bash
+pip install -r requirements.txt
+```
+
+Then in Google Cloud Console:
+
+1. Enable the "Google Calendar API" for a project.
+2. Create an OAuth 2.0 Client ID of type "Desktop app" (APIs & Services >
+   Credentials).
+3. Download the client secret JSON and save it as `credentials.json` next
+   to `googlecal.py`.
+
+On first use a browser window opens to grant access; the resulting token is
+cached in `token.json` next to `googlecal.py` so future runs don't prompt
+again (refreshed automatically once expired). Both `credentials.json` and
+`token.json` hold sensitive access to your calendar — they're already
+covered by `.gitignore`, don't commit or share them.
+
+### Quick start
+
+```bash
+python3 googlecal.py             # appointments for today (default)
+python3 googlecal.py day         # same as above, explicit
+python3 googlecal.py week        # appointments for the current Mon-Sun week
+python3 googlecal.py month       # appointments for the current calendar month
+```
+
+### `GoogleCal`
+
+```python
+from googlecal import GoogleCal
+
+cal = GoogleCal()                        # looks for credentials.json/token.json next to googlecal.py
+events = cal.get_events_for_day()        # today; pass a date to target a different day
+events = cal.get_events_for_week()       # current Mon-Sun calendar week
+events = cal.get_events_for_month()      # current calendar month
+
+cal.report_day()                         # prints the day's appointments, returns the Events
+cal.report_week()
+cal.report_month()
+```
+
+Each result is a list of `Event(summary, start, end, location, all_day)`,
+sorted by start time. Use `get_events(time_min, time_max)` directly for a
+custom window.
 
 ## Limitations & privacy notes
 

@@ -377,9 +377,20 @@ class Alert:
         """Return the list of Period matches for this condition."""
         raise NotImplementedError
 
-    def is_active_now(self, visits, now=None, recent_window=timedelta(minutes=10)):
+    def active_matches(self, visits, now=None, recent_window=timedelta(minutes=10)):
+        """Return the subset of evaluate()'s matches that are current right
+        now, i.e. worth speaking an alert about."""
         now = now or datetime.now()
-        return any(p.end >= now - recent_window for p in self.evaluate(visits))
+        return [p for p in self.evaluate(visits) if p.end >= now - recent_window]
+
+    def is_active_now(self, visits, now=None, recent_window=timedelta(minutes=10)):
+        return bool(self.active_matches(visits, now, recent_window))
+
+    def speak_message(self, matches):
+        """Message to speak when this alert is active. Default looks up a
+        static message keyed by name; alerts needing per-match detail (e.g.
+        CalendarAlert) override this."""
+        return ALERT_MESSAGES.get(self.name, f"I have detected the alert: {self.name}.")
 
 
 class DoomScrollAlert(Alert):
@@ -469,6 +480,63 @@ class YouTubeLimitAlert(Alert):
         return periods
 
 
+@dataclass
+class CalendarReminder:
+    summary: str
+    location: str
+    start: datetime
+    lead: timedelta
+
+
+class CalendarAlert(Alert):
+    """e) Speaks appointment details 15, 10, and 5 minutes before each
+    timed calendar event. All-day events have no specific time to count
+    down to, so they're ignored entirely. Takes any object exposing
+    get_events(time_min, time_max) -> list of objects with summary,
+    location, start, all_day (i.e. a googlecal.GoogleCal), so alerter.py
+    doesn't need to import googlecal itself."""
+
+    name = "calendar"
+
+    def __init__(self, google_cal, lead_times=(timedelta(minutes=15), timedelta(minutes=10), timedelta(minutes=5)),
+                 catch_window=timedelta(minutes=5)):
+        self.google_cal = google_cal
+        self.lead_times = lead_times
+        # How far a trigger instant may have already passed and still count
+        # as "now" -- sized to the polling cadence (e.g. every 5 minutes via
+        # cron) so a single run is guaranteed to catch each trigger exactly
+        # once.
+        self.catch_window = catch_window
+
+    def evaluate(self, visits=None, now=None):
+        # Normalize to an aware datetime in the local timezone regardless of
+        # whether 'now' was passed in naive (e.g. from AlertManager, which
+        # deals in naive browser-history timestamps) or aware.
+        now = (now or datetime.now()).astimezone()
+        max_lead = max(self.lead_times)
+        events = self.google_cal.get_events(now - self.catch_window, now + max_lead + self.catch_window)
+        reminders = []
+        for event in events:
+            if event.all_day:
+                continue
+            for lead in self.lead_times:
+                trigger = event.start - lead
+                if now - self.catch_window < trigger <= now:
+                    reminders.append(CalendarReminder(event.summary, event.location, event.start, lead))
+        return reminders
+
+    def active_matches(self, visits, now=None, recent_window=None):
+        return self.evaluate(visits, now=now)
+
+    def is_active_now(self, visits, now=None, recent_window=None):
+        return bool(self.active_matches(visits, now, recent_window))
+
+    def speak_message(self, matches):
+        reminder = matches[0]
+        time_str = reminder.start.strftime("%I:%M %p").lstrip("0")
+        return f"You have a scheduled event at {time_str}."
+
+
 # ---------------------------------------------------------------------------
 # Reporting periods: day / week / month, expressed in hours for read_urls()
 # ---------------------------------------------------------------------------
@@ -494,9 +562,13 @@ def _format_period(hours: float) -> str:
 # ---------------------------------------------------------------------------
 
 class AlertManager:
-    def __init__(self, alerter: Alerter):
+    def __init__(self, alerter: Alerter, excluded_domains=None):
         self.alerter = alerter
         self.alerts = {}  # name -> Alert
+        # Domains (and their subdomains) that should never trigger any
+        # alert -- e.g. sites used for work or job-hunting that would
+        # otherwise look like doom-scrolling or off-topic browsing.
+        self.excluded_domains = set(excluded_domains) if excluded_domains else set()
 
     def add_alert(self, alert: Alert):
         self.alerts[alert.name] = alert
@@ -504,16 +576,40 @@ class AlertManager:
     def remove_alert(self, name: str):
         self.alerts.pop(name, None)
 
-    def evaluate_all(self, hours: int):
+    def _is_excluded(self, domain: str) -> bool:
+        return any(domain == d or domain.endswith("." + d) for d in self.excluded_domains)
+
+    def read_visits(self, hours: int):
+        """Fetch visits for the last `hours` hours, with excluded_domains
+        filtered out before any alert ever sees them."""
         visits = self.alerter.read_urls(hours)
+        if not self.excluded_domains:
+            return visits
+        return [v for v in visits if not self._is_excluded(v.domain)]
+
+    def evaluate_all(self, hours: int):
+        visits = self.read_visits(hours)
         return {name: alert.evaluate(visits) for name, alert in self.alerts.items()}
 
     def detect_current(self, hours: int = 3, recent_window=timedelta(minutes=10)):
-        """Return the names of alerts whose condition is active right now
-        (i.e. their most recent matching visit fell within recent_window)."""
-        visits = self.alerter.read_urls(hours)
+        """Return {name: matches} for every alert whose condition is active
+        right now (i.e. its most recent match fell within recent_window,
+        or -- for alerts like CalendarAlert that define their own notion of
+        'current' -- whatever active_matches() returns)."""
+        visits = self.read_visits(hours)
         now = datetime.now()
-        return [name for name, alert in self.alerts.items() if alert.is_active_now(visits, now, recent_window)]
+        active = {}
+        for name, alert in self.alerts.items():
+            try:
+                matches = alert.active_matches(visits, now, recent_window)
+            except Exception as e:
+                # A failure in one alert (e.g. a Google Calendar API hiccup)
+                # shouldn't take down the others in the same run.
+                print(f"Warning: could not evaluate alert {name!r}: {e}")
+                continue
+            if matches:
+                active[name] = matches
+        return active
 
     @staticmethod
     def _format_span(start: datetime, end: datetime) -> str:
@@ -624,22 +720,37 @@ ALERT_MESSAGES = {
     "youtube_limit": "I have detected that you have gone over your YouTube Shorts limit for today.",
 }
 
+# Sites used for work or job-hunting: never flag doom-scrolling, long-form,
+# off-topic, or YouTube-limit alerts for these, no matter how they're used.
+EXCLUDED_DOMAINS = {
+    "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com",
+}
+
 
 def main(period: str = None):
     """Run the live alert check. If period ('day'/'week'/'month') is given,
     also print a report over that window before checking."""
     alerter = Alerter()
-    manager = AlertManager(alerter)
+    manager = AlertManager(alerter, excluded_domains=EXCLUDED_DOMAINS)
     manager.add_alert(DoomScrollAlert())
     manager.add_alert(LongFormAlert())
     manager.add_alert(OffTopicAlert())
     manager.add_alert(YouTubeLimitAlert())
 
+    # Calendar reminders are optional: googlecal.py pulls in the Google API
+    # client libraries and OAuth credentials, neither of which the browsing
+    # alerts above need, so their absence shouldn't break this script.
+    try:
+        from googlecal import GoogleCal
+        manager.add_alert(CalendarAlert(GoogleCal()))
+    except (ImportError, FileNotFoundError) as e:
+        print(f"Note: calendar reminders disabled ({e}).")
+
     if period is not None:
         if period not in PERIOD_HOURS:
             raise ValueError(f"period must be one of {sorted(PERIOD_HOURS)}, got {period!r}")
         hours = PERIOD_HOURS[period]
-        visits = alerter.read_urls(hours)
+        visits = manager.read_visits(hours)
         manager.report_doom_scrolling(visits, hours=hours)
         manager.report_long_form(visits, hours=hours)
         manager.report_off_topic(visits, hours=hours)
@@ -651,10 +762,12 @@ def main(period: str = None):
     now = datetime.now()
     hours_since_midnight = (now - datetime.combine(now.date(), datetime.min.time())).total_seconds() / 3600
     active = manager.detect_current(hours=max(3, hours_since_midnight))
-    if len(active) >= 1:
-        if len(active) > 1:
-            print(f"Multiple alerts active at once ({active}); speaking one of them.")
-        message = ALERT_MESSAGES.get(active[0], f"I have detected the alert: {active[0]}.")
+    if active:
+        names = list(active)
+        if len(names) > 1:
+            print(f"Multiple alerts active at once ({names}); speaking one of them.")
+        name = names[0]
+        message = manager.alerts[name].speak_message(active[name])
         print(message)
         speak(message)
     else:
