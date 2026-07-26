@@ -384,11 +384,11 @@ class Alert:
 
 class DoomScrollAlert(Alert):
     """a) Repeated, frequent visits to one site (short-form content): gap
-    between 0 and 10 min, sustained > 15 min."""
+    between 0 and 10 min, sustained > 7 min."""
 
     name = "doom_scroll"
 
-    def __init__(self, max_gap=timedelta(minutes=10), min_duration=timedelta(minutes=15)):
+    def __init__(self, max_gap=timedelta(minutes=10), min_duration=timedelta(minutes=7)):
         self.max_gap = max_gap
         self.min_duration = min_duration
 

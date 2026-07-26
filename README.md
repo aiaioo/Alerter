@@ -6,7 +6,7 @@ A tool to watch my time usage and alert me when I am not making good use of my t
 browsing history and alerts you to four patterns:
 
 - **Doom-scrolling (short-form content)** — repeated visits to one site
-  spaced 0 to 10 minutes apart, sustained for more than 15 minutes.
+  spaced 0 to 10 minutes apart, sustained for more than 7 minutes.
 - **Long-form watching** — visits to one site spaced between 10 and 90
   minutes apart, sustained for more than 1.5 hours (e.g. a long video with
   periodic checks/comments).
@@ -184,7 +184,7 @@ alert check, with no report.
 
 | Class | Trigger | Default threshold |
 |---|---|---|
-| `DoomScrollAlert` | consecutive same-site visits with gaps under `max_gap` | 0 min < gap < 10 min, sustained > 15 min |
+| `DoomScrollAlert` | consecutive same-site visits with gaps under `max_gap` | 0 min < gap < 10 min, sustained > 7 min |
 | `LongFormAlert` | consecutive same-site visits with gaps in a mid-range window | 10 min < gap < 90 min, sustained > 1.5 hr |
 | `OffTopicAlert` | any visited domain/page not matching your allow-list or keywords | see below |
 | `YouTubeLimitAlert` | any YouTube Shorts visit (`/shorts/...`) once today's count exceeds `daily_limit` | `daily_limit=10` |
@@ -192,7 +192,7 @@ alert check, with no report.
 All thresholds are constructor arguments:
 
 ```python
-DoomScrollAlert(max_gap=timedelta(minutes=10), min_duration=timedelta(minutes=15))
+DoomScrollAlert(max_gap=timedelta(minutes=10), min_duration=timedelta(minutes=7))
 LongFormAlert(min_gap=timedelta(minutes=10), max_gap=timedelta(minutes=90), min_duration=timedelta(hours=1.5))
 YouTubeLimitAlert(daily_limit=10)
 ```
