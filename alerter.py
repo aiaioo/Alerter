@@ -439,20 +439,34 @@ class OffTopicAlert(Alert):
         "leetcode.com", "realpython.com", "developer.mozilla.org", "readthedocs.io",
     "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com",
     "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "udemy.com", "coursera.org",
+    "vercel.com", "zapier.com", "azure.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com",
+    "naukri.com",
     }
     DEFAULT_KEYWORDS = {
         "ai", "machine learning", "deep learning", "neural network", "llm",
         "python", "programming", "software", "coding", "algorithm",
         "data science", "pytorch", "tensorflow", "gpt", "transformer",
+        # cloud/hosting/deployment, characteristic of vercel, azure, aws,
+        # digitalocean, linode, akamai, firebase
+        "cloud computing", "web hosting", "devops", "serverless", "deployment", "cdn",
+        # automation, characteristic of zapier
+        "automation workflow",
+        # domain/dns, characteristic of porkbun
+        "domain registrar", "dns",
+        # job-hunting, characteristic of linkedin, mercor, alignerr, turing
+        "job search", "career",
+        # notes/productivity, characteristic of notion
+        "note-taking", "wiki", "productivity",
     }
 
-    def __init__(self, allowed_domains=None, keywords=None, min_recent_visits=3):
+    def __init__(self, allowed_domains=None, keywords=None, min_recent_visits=3, lookback_window=timedelta(minutes=15)):
         self.allowed_domains = set(allowed_domains) if allowed_domains else set(self.DEFAULT_ALLOWED_DOMAINS)
         self.keywords = {k.lower() for k in (keywords or self.DEFAULT_KEYWORDS)}
-        # How many off-topic visits must land within the recent_window before
+        # How many off-topic visits must land within lookback_window before
         # this counts as "active" -- a single stray visit shouldn't trigger
         # a spoken alert.
         self.min_recent_visits = min_recent_visits
+        self.lookback_window = lookback_window
 
     def _is_on_topic(self, visit: Visit) -> bool:
         if any(visit.domain == d or visit.domain.endswith("." + d) for d in self.allowed_domains):
@@ -464,9 +478,17 @@ class OffTopicAlert(Alert):
         return [Period(v.domain, v.time, v.time, 1) for v in visits if v.domain and not self._is_on_topic(v)]
 
     def active_matches(self, visits, now=None, recent_window=timedelta(minutes=5)):
+        """Active once min_recent_visits off-topic visits land within
+        lookback_window, provided at least one of them is within
+        recent_window -- so a burst that trails off more than recent_window
+        ago no longer keeps re-triggering."""
         now = now or datetime.now()
-        recent = [p for p in self.evaluate(visits) if p.end >= now - recent_window]
-        return recent if len(recent) >= self.min_recent_visits else []
+        within_lookback = [p for p in self.evaluate(visits) if p.end >= now - self.lookback_window]
+        if len(within_lookback) < self.min_recent_visits:
+            return []
+        if not any(p.end >= now - recent_window for p in within_lookback):
+            return []
+        return within_lookback
 
 
 class YouTubeLimitAlert(Alert):
@@ -738,7 +760,9 @@ ALERT_MESSAGES = {
 # they're used.
 EXCLUDED_DOMAINS = {
     "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com",
-    "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "coursera.org", "udemy.com", 
+    "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "coursera.org", "udemy.com",
+    "vercel.com", "zapier.com", "azure.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com",
+    "naukri.com",
 }
 
 

@@ -271,22 +271,31 @@ other visit would.
 
 ### Customizing "on topic" for `OffTopicAlert`
 
-By default, `OffTopicAlert` treats a page as on-topic (AI & programming) if
-its domain is on an allow-list, or its URL/title contains a keyword like
-`python`, `machine learning`, `algorithm`, etc. Anything else is flagged.
-Override either list to match your own learning goals:
+By default, `OffTopicAlert` treats a page as on-topic (AI & programming,
+cloud/deployment, job-hunting, or notes/productivity) if its domain is on
+an allow-list, or its URL/title contains a keyword like `python`,
+`machine learning`, `algorithm`, `devops`, `job search`, etc. — the
+keyword list is meant to generalize past the allow-listed domains
+themselves, so a similar site not explicitly listed (e.g. another cloud
+host or job board) still gets treated as on-topic. Anything else is
+flagged. Override either list to match your own learning goals:
 
 ```python
 OffTopicAlert(
     allowed_domains={"github.com", "arxiv.org", "en.wikipedia.org"},
     keywords={"python", "statistics", "history"},
     min_recent_visits=3,
+    lookback_window=timedelta(minutes=15),
 )
 ```
 
-`min_recent_visits` (default 3) is how many off-topic visits must land
-within `active_matches()`'s `recent_window` before the alert is considered
-active — a single stray off-topic page load won't trigger speech.
+The alert is active once `min_recent_visits` (default 3) off-topic visits
+land within `lookback_window` (default 15 minutes) — a single stray
+off-topic page load won't trigger speech — provided at least one of those
+visits also falls within `active_matches()`'s `recent_window` (default 5
+minutes, matching the cron cadence). That second check means a burst of
+off-topic visits stops re-triggering once it's trailed off for more than
+`recent_window`, even if it's still within `lookback_window`.
 
 ### Writing your own alert
 
