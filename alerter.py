@@ -444,9 +444,13 @@ class OffTopicAlert(Alert):
         "data science", "pytorch", "tensorflow", "gpt", "transformer",
     }
 
-    def __init__(self, allowed_domains=None, keywords=None):
+    def __init__(self, allowed_domains=None, keywords=None, min_recent_visits=3):
         self.allowed_domains = set(allowed_domains) if allowed_domains else set(self.DEFAULT_ALLOWED_DOMAINS)
         self.keywords = {k.lower() for k in (keywords or self.DEFAULT_KEYWORDS)}
+        # How many off-topic visits must land within the recent_window before
+        # this counts as "active" -- a single stray visit shouldn't trigger
+        # a spoken alert.
+        self.min_recent_visits = min_recent_visits
 
     def _is_on_topic(self, visit: Visit) -> bool:
         if any(visit.domain == d or visit.domain.endswith("." + d) for d in self.allowed_domains):
@@ -456,6 +460,11 @@ class OffTopicAlert(Alert):
 
     def evaluate(self, visits):
         return [Period(v.domain, v.time, v.time, 1) for v in visits if v.domain and not self._is_on_topic(v)]
+
+    def active_matches(self, visits, now=None, recent_window=timedelta(minutes=10)):
+        now = now or datetime.now()
+        recent = [p for p in self.evaluate(visits) if p.end >= now - recent_window]
+        return recent if len(recent) >= self.min_recent_visits else []
 
 
 class YouTubeLimitAlert(Alert):
