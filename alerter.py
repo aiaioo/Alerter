@@ -13,7 +13,7 @@ import subprocess
 import sys
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -659,6 +659,134 @@ class CalendarAlert(Alert):
         return f"You have a scheduled event at {time_str}."
 
 
+@dataclass
+class WakeUpStage:
+    label: str
+    offset: timedelta  # how long before leave_time this stage's window starts (or is centered on)
+    window: timedelta  # half-width (centered stages) or full width (non-centered) of the window
+    centered: bool
+    message: str  # may reference {wake_time}
+
+
+class WakeUpAlert(Alert):
+    """f) Walks you through a fixed morning routine -- wake, brush, eat
+    breakfast while water heats, bathe/shave, dress and pack, then leave --
+    timed backward from a work arrival time and commute duration so you
+    leave with enough margin to arrive on time. Each stage speaks at most
+    once per weekday (Monday-Friday; getting to work on time isn't a
+    weekend concern), tracked in a small JSON state file the same way
+    CalendarAlert dedups (event, range) pairs, since this script runs
+    fresh on every cron invocation rather than staying resident."""
+
+    name = "wake_up"
+
+    WEEKDAYS = {0, 1, 2, 3, 4}  # Monday .. Friday
+
+    # How long an alerted-state entry is kept before being pruned, so the
+    # state file doesn't grow forever across a long-running periodic script.
+    STATE_RETENTION = timedelta(days=2)
+
+    # Offsets are spaced 15 minutes apart working backward from leave_time,
+    # mirroring the get-ready checklist: wake (75 min out) -> stop brushing,
+    # start breakfast while the bath water heats (60) -> finish breakfast,
+    # start bathing/shaving (45) -> dress and pack (30) -> walk out the door
+    # (15, and centered rather than a hard cutoff, since "leave now" is
+    # worth saying a little early or a little late too).
+    DEFAULT_STAGES = (
+        WakeUpStage(
+            "wake", timedelta(minutes=75), timedelta(minutes=5), False,
+            "Wake up! Wake up! It's {wake_time}. Look there. The sun is up "
+            "already. It's time to go to work! Open the window. Wake up. "
+            "Brush your teeth.",
+        ),
+        WakeUpStage(
+            "brush_breakfast", timedelta(minutes=60), timedelta(minutes=5), False,
+            "Stop brushing your teeth now. Time for breakfast! Put the "
+            "water on to heat for your bath.",
+        ),
+        WakeUpStage(
+            "finish_breakfast_bathe", timedelta(minutes=45), timedelta(minutes=5), False,
+            "Finish your breakfast now. The water should be hot by now -- "
+            "time to bathe and shave.",
+        ),
+        WakeUpStage(
+            "dress_pack", timedelta(minutes=30), timedelta(minutes=5), False,
+            "Time to get dressed and pack your bag for work.",
+        ),
+        WakeUpStage(
+            "leave", timedelta(minutes=15), timedelta(minutes=5), True,
+            "Time to leave the house and go to work!",
+        ),
+    )
+
+    def __init__(self, arrival_time: time = time(8, 0), commute: timedelta = timedelta(minutes=75),
+                 stages=None, state_file=None, base_dir=None):
+        self.arrival_time = arrival_time
+        self.commute = commute
+        self.stages = stages if stages is not None else self.DEFAULT_STAGES
+        self.state_file = Path(state_file) if state_file else (
+            Path(base_dir) if base_dir else Path(__file__).resolve().parent
+        ) / "wake_up_alert_state.json"
+
+    def _load_state(self) -> dict:
+        if not self.state_file.exists():
+            return {}
+        try:
+            return json.loads(self.state_file.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+
+    def _save_state(self, state: dict):
+        try:
+            self.state_file.write_text(json.dumps(state))
+        except OSError as e:
+            print(f"Warning: could not save wake-up alert state to {self.state_file}: {e}")
+
+    def _leave_time(self, now: datetime) -> datetime:
+        return datetime.combine(now.date(), self.arrival_time) - self.commute
+
+    def evaluate(self, visits=None, now=None):
+        now = now or datetime.now()
+        if now.weekday() not in self.WEEKDAYS:
+            return []
+        leave_time = self._leave_time(now)
+        wake_time_str = (leave_time - self.stages[0].offset).strftime("%I:%M").lstrip("0")
+
+        state = self._load_state()
+        today = now.date().isoformat()
+        matches = []
+        newly_alerted = {}
+        for stage in self.stages:
+            target = leave_time - stage.offset
+            start, end = (target - stage.window, target + stage.window) if stage.centered \
+                else (target, target + stage.window)
+            if not (start <= now < end):
+                continue
+            key = f"{today}|{stage.label}"
+            if key not in state:
+                matches.append(stage.message.format(wake_time=wake_time_str))
+                newly_alerted[key] = now.isoformat()
+
+        if newly_alerted:
+            state.update(newly_alerted)
+            cutoff = now - self.STATE_RETENTION
+            state = {
+                k: v for k, v in state.items()
+                if _safe_fromisoformat(v, now) >= cutoff
+            }
+            self._save_state(state)
+        return matches
+
+    def active_matches(self, visits, now=None, recent_window=None):
+        return self.evaluate(visits, now=now)
+
+    def is_active_now(self, visits, now=None, recent_window=None):
+        return bool(self.active_matches(visits, now, recent_window))
+
+    def speak_message(self, matches):
+        return matches[0]
+
+
 # ---------------------------------------------------------------------------
 # Reporting periods: day / week / month, expressed in hours for read_urls()
 # ---------------------------------------------------------------------------
@@ -892,6 +1020,7 @@ def main(period: str = None):
     manager.add_alert(LongFormAlert())
     manager.add_alert(OffTopicAlert())
     manager.add_alert(YouTubeLimitAlert())
+    manager.add_alert(WakeUpAlert())
 
     # Calendar reminders are optional: googlecal.py pulls in the Google API
     # client libraries and OAuth credentials, neither of which the browsing
@@ -928,6 +1057,17 @@ def main(period: str = None):
     if calendar_matches:
         for reminder in calendar_matches:
             message = manager.alerts["calendar"].speak_message([reminder])
+            print(message)
+            speak(message)
+        spoke_anything = True
+
+    # Wake-up stages are spoken in full every time too, for the same reason
+    # as calendar reminders: each stage only ever fires once per weekday
+    # (see WakeUpAlert's own dedup), so folding it into the "speak just one
+    # alert" pick below could silently drop it for good.
+    wake_up_matches = active.pop("wake_up", None)
+    if wake_up_matches:
+        for message in wake_up_matches:
             print(message)
             speak(message)
         spoke_anything = True

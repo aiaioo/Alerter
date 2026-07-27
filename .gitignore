@@ -5,4 +5,5 @@ credentials.json
 token.json
 cron.log
 calendar_alert_state.json
+wake_up_alert_state.json
 *.txt

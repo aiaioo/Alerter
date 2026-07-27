@@ -19,6 +19,11 @@ browsing history and alerts you to four patterns:
   15, 10, and 5 minutes before each timed event on your Google Calendar
   (all-day events are ignored, since they have no specific time to count
   down to). Requires `googlecal.py` to be set up; see below.
+- **Wake-up routine** — on weekday mornings, walks you through a fixed
+  get-ready checklist (wake, brush, breakfast while the bath water heats,
+  bathe/shave, dress and pack, then leave) timed backward from a work
+  arrival time and commute duration, so you leave home with enough margin
+  to get there on time.
 
 It works even while the browser is open, by copying the history database
 files before reading them (browsers lock these files while running).
@@ -214,6 +219,7 @@ alert check, with no report.
 | `OffTopicAlert` | any visited domain/page not matching your allow-list or keywords | see below |
 | `YouTubeLimitAlert` | any YouTube Shorts visit (`/shorts/...`) once today's count exceeds `daily_limit` | `daily_limit=10` |
 | `CalendarAlert` | a timed Google Calendar event starting in one of `lead_times` | `lead_times=(15, 10, 5)` minutes |
+| `WakeUpAlert` | weekday morning get-ready stages timed back from `arrival_time` | `arrival_time=8:00 AM`, `commute=75 min` |
 
 All thresholds are constructor arguments:
 
@@ -222,6 +228,7 @@ DoomScrollAlert(max_gap=timedelta(minutes=10), min_duration=timedelta(minutes=7)
 LongFormAlert(min_gap=timedelta(minutes=10), max_gap=timedelta(minutes=90), min_duration=timedelta(hours=1.5))
 YouTubeLimitAlert(daily_limit=10)
 CalendarAlert(google_cal, lead_times=(timedelta(minutes=15), timedelta(minutes=10), timedelta(minutes=5)))
+WakeUpAlert(arrival_time=time(8, 0), commute=timedelta(minutes=75))
 ```
 
 ### `CalendarAlert`
@@ -268,6 +275,43 @@ there's no URL-based way to tell short from long content outside YouTube.
 `DoomScrollAlert` is intentionally left untouched — a long-form YouTube
 video visit still counts towards a doom-scrolling session exactly as any
 other visit would.
+
+### `WakeUpAlert`
+
+Walks you through a fixed morning routine on weekdays (Monday–Friday), timed
+backward from a work arrival time and commute duration:
+
+```python
+from datetime import time, timedelta
+from alerter import Alerter, AlertManager, WakeUpAlert
+
+manager = AlertManager(Alerter())
+manager.add_alert(WakeUpAlert(arrival_time=time(8, 0), commute=timedelta(minutes=75)))
+```
+
+With the defaults above (8:00 AM arrival, 75-minute commute), `leave_time`
+works out to 6:45 AM, and five stages fire in 5-minute (10-minute for the
+last one) windows spaced 15 minutes apart counting back from it:
+
+| Stage | Window | Message |
+|---|---|---|
+| Wake | 5:30–5:35 | "Wake up! Wake up! It's 5:30. ... Brush your teeth." |
+| Brush / start breakfast | 5:45–5:50 | Stop brushing, eat breakfast, put the bath water on to heat |
+| Finish breakfast / bathe | 6:00–6:05 | Finish breakfast, water should be hot — bathe and shave |
+| Dress and pack | 6:15–6:20 | Get dressed and pack your bag |
+| Leave | 6:25–6:35 (6:30 ± 5) | Leave the house and go to work |
+
+Change `arrival_time`/`commute` to retarget the whole schedule at a
+different office or arrival time — every stage shifts with `leave_time`
+since each is defined as an offset before it. Pass a custom `stages` list of
+`WakeUpStage(label, offset, window, centered, message)` to change the
+wording, spacing, or number of stages entirely.
+
+Like `CalendarAlert`, each stage fires at most once per day (tracked in
+`wake_up_alert_state.json` next to `alerter.py`), so it won't repeat if the
+`*/5 * * * *` cron job catches the same window twice, and `speak_message`
+is overridden since the message is stage-specific rather than a single
+fixed string.
 
 ### Customizing "on topic" for `OffTopicAlert`
 
