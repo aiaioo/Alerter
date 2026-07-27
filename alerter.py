@@ -465,7 +465,7 @@ class OffTopicAlert(Alert):
         # Legal research and Indian government sites
         "gov.in", "casemine.com", "scconline.com", "indiakanoon.org",
         "karnatakamedicalcouncil.com",
-        # Travel booking sites
+        # Work operations: travel booking sites
         "yatra.com", "makemytrip.com", "irctc.co.in",
     }
     DEFAULT_KEYWORDS = {
@@ -819,7 +819,7 @@ EXCLUDED_DOMAINS = {
     # Legal research and Indian government sites
     "gov.in", "casemine.com", "scconline.com", "indiakanoon.org",
     "karnatakamedicalcouncil.com",
-    # Travel booking sites
+    # Work operations: travel booking sites
     "yatra.com", "makemytrip.com", "irctc.co.in",
 }
 
