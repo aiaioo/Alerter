@@ -464,6 +464,7 @@ class OffTopicAlert(Alert):
         "ieeexplore.ieee.org", "link.springer.com", "nature.com", "sciencedirect.com",
         # Legal research and Indian government sites
         "gov.in", "casemine.com", "scconline.com", "indiakanoon.org",
+        "karnatakamedicalcouncil.com",
     }
     DEFAULT_KEYWORDS = {
         "ai", "machine learning", "deep learning", "neural network", "llm",
@@ -815,6 +816,7 @@ EXCLUDED_DOMAINS = {
     "ieeexplore.ieee.org", "link.springer.com", "nature.com", "sciencedirect.com",
     # Legal research and Indian government sites
     "gov.in", "casemine.com", "scconline.com", "indiakanoon.org",
+    "karnatakamedicalcouncil.com",
 }
 
 
