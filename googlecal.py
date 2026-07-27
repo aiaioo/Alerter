@@ -207,4 +207,7 @@ if __name__ == "__main__":
     parser.add_argument("period", nargs="?", default=None, choices=sorted(PERIOD_REPORTS),
                          help="Window to report on (default: no report unless given)")
     args = parser.parse_args()
-    main(args.period)
+    if args.period is None:
+        parser.print_help()
+    else:
+        main(args.period)
