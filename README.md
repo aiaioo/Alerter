@@ -154,7 +154,7 @@ for name, periods in results.items():
 
 # Which alerts are firing right now? -> {name: matches}, matches being
 # whatever that alert's active_matches()/evaluate() returns.
-active_now = manager.detect_current(hours=3, recent_window=timedelta(minutes=10))
+active_now = manager.detect_current(hours=3, recent_window=timedelta(minutes=5))
 ```
 
 Each match is a `Period(domain, start, end, visit_count)`, except for
@@ -280,8 +280,13 @@ Override either list to match your own learning goals:
 OffTopicAlert(
     allowed_domains={"github.com", "arxiv.org", "en.wikipedia.org"},
     keywords={"python", "statistics", "history"},
+    min_recent_visits=3,
 )
 ```
+
+`min_recent_visits` (default 3) is how many off-topic visits must land
+within `active_matches()`'s `recent_window` before the alert is considered
+active — a single stray off-topic page load won't trigger speech.
 
 ### Writing your own alert
 
