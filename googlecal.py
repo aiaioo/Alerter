@@ -25,6 +25,7 @@ class Event:
     end: dt.datetime
     location: str = ""
     all_day: bool = False
+    id: str = ""
 
 
 class GoogleCal:
@@ -96,6 +97,7 @@ class GoogleCal:
             end=end,
             location=raw.get("location", ""),
             all_day=all_day,
+            id=raw.get("id", ""),
         )
 
     def get_events(self, time_min: dt.datetime, time_max: dt.datetime) -> list[Event]:
@@ -188,7 +190,12 @@ PERIOD_REPORTS = {
 }
 
 
-def main(period: str = "day"):
+def main(period: str = None):
+    """Report on Google Calendar appointments. Does nothing unless a period
+    ('day'/'week'/'month') is given -- there's no report-by-default here,
+    since this script is also imported just for its GoogleCal class."""
+    if period is None:
+        return
     if period not in PERIOD_REPORTS:
         raise ValueError(f"period must be one of {sorted(PERIOD_REPORTS)}, got {period!r}")
     cal = GoogleCal()
@@ -197,7 +204,7 @@ def main(period: str = "day"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Report on Google Calendar appointments for a day, week, or month.")
-    parser.add_argument("period", nargs="?", default="day", choices=sorted(PERIOD_REPORTS),
-                         help="Window to report on (default: day)")
+    parser.add_argument("period", nargs="?", default=None, choices=sorted(PERIOD_REPORTS),
+                         help="Window to report on (default: no report unless given)")
     args = parser.parse_args()
     main(args.period)

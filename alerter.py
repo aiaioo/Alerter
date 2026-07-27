@@ -5,6 +5,7 @@ and off-topic browsing.
 """
 
 import argparse
+import json
 import os
 import shutil
 import sqlite3
@@ -547,6 +548,16 @@ class YouTubeLimitAlert(Alert):
         return periods
 
 
+def _safe_fromisoformat(value: str, default: datetime) -> datetime:
+    """Parses an ISO timestamp from the calendar alert state file, falling
+    back to 'default' (kept, not pruned) if a hand-edited or corrupted
+    entry can't be parsed."""
+    try:
+        return datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return default
+
+
 @dataclass
 class CalendarReminder:
     summary: str
@@ -556,40 +567,83 @@ class CalendarReminder:
 
 
 class CalendarAlert(Alert):
-    """e) Speaks appointment details 15, 10, and 5 minutes before each
-    timed calendar event. All-day events have no specific time to count
-    down to, so they're ignored entirely. Takes any object exposing
+    """e) Speaks appointment details once a timed calendar event falls
+    within a) 15-10, b) 10-5, or c) 5-0 minutes out, at most once per
+    event per range. All-day events have no specific time to count down
+    to, so they're ignored entirely. Takes any object exposing
     get_events(time_min, time_max) -> list of objects with summary,
-    location, start, all_day (i.e. a googlecal.GoogleCal), so alerter.py
-    doesn't need to import googlecal itself."""
+    location, start, all_day, id (i.e. a googlecal.GoogleCal), so
+    alerter.py doesn't need to import googlecal itself.
+
+    Which (event, range) pairs have already been alerted is tracked in a
+    small JSON state file rather than inferred from run timing, since this
+    script is invoked fresh each time (e.g. via cron every 5 minutes) and
+    a timing-window trick would double-alert or silently miss a range
+    entirely if a run is skipped or delayed."""
 
     name = "calendar"
 
-    def __init__(self, google_cal, lead_times=(timedelta(minutes=15), timedelta(minutes=10), timedelta(minutes=5)),
-                 catch_window=timedelta(minutes=5)):
+    # (label, minutes-out upper bound (exclusive), minutes-out lower bound (inclusive))
+    RANGES = (
+        ("15 to 10 minutes", timedelta(minutes=15), timedelta(minutes=10)),
+        ("10 to 5 minutes", timedelta(minutes=10), timedelta(minutes=5)),
+        ("5 to 0 minutes", timedelta(minutes=5), timedelta(0)),
+    )
+
+    # How long an alerted-state entry is kept before being pruned, so the
+    # state file doesn't grow forever across a long-running periodic script.
+    STATE_RETENTION = timedelta(days=2)
+
+    def __init__(self, google_cal, state_file=None):
         self.google_cal = google_cal
-        self.lead_times = lead_times
-        # How far a trigger instant may have already passed and still count
-        # as "now" -- sized to the polling cadence (e.g. every 5 minutes via
-        # cron) so a single run is guaranteed to catch each trigger exactly
-        # once.
-        self.catch_window = catch_window
+        self.state_file = Path(state_file) if state_file else self.google_cal.base_dir / "calendar_alert_state.json"
+
+    def _load_state(self) -> dict:
+        if not self.state_file.exists():
+            return {}
+        try:
+            return json.loads(self.state_file.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+
+    def _save_state(self, state: dict):
+        try:
+            self.state_file.write_text(json.dumps(state))
+        except OSError as e:
+            print(f"Warning: could not save calendar alert state to {self.state_file}: {e}")
 
     def evaluate(self, visits=None, now=None):
         # Normalize to an aware datetime in the local timezone regardless of
         # whether 'now' was passed in naive (e.g. from AlertManager, which
         # deals in naive browser-history timestamps) or aware.
         now = (now or datetime.now()).astimezone()
-        max_lead = max(self.lead_times)
-        events = self.google_cal.get_events(now - self.catch_window, now + max_lead + self.catch_window)
+        # Small backward buffer guards against an event whose start lands
+        # exactly on 'now' being excluded by API/clock rounding.
+        events = self.google_cal.get_events(now - timedelta(minutes=1), now + timedelta(minutes=15))
+
+        state = self._load_state()
         reminders = []
+        newly_alerted = {}
         for event in events:
-            if event.all_day:
+            if event.all_day or not event.id:
                 continue
-            for lead in self.lead_times:
-                trigger = event.start - lead
-                if now - self.catch_window < trigger <= now:
-                    reminders.append(CalendarReminder(event.summary, event.location, event.start, lead))
+            until = event.start - now
+            for label, hi, lo in self.RANGES:
+                if lo <= until < hi:
+                    key = f"{event.id}|{label}"
+                    if key not in state:
+                        reminders.append(CalendarReminder(event.summary, event.location, event.start, hi))
+                        newly_alerted[key] = now.isoformat()
+                    break
+
+        if newly_alerted:
+            state.update(newly_alerted)
+            cutoff = now - self.STATE_RETENTION
+            state = {
+                k: v for k, v in state.items()
+                if _safe_fromisoformat(v, now) >= cutoff
+            }
+            self._save_state(state)
         return reminders
 
     def active_matches(self, visits, now=None, recent_window=None):
@@ -857,12 +911,26 @@ def main(period: str = None):
         manager.report_off_topic(visits, hours=hours)
         manager.report_youtube_limit(visits, hours=hours)
 
-    # Detect what's happening right now, and speak it if exactly one alert fires.
-    # The lookback covers the whole calendar day so far, since the YouTube
-    # limit alert needs today's full Shorts count, not just a few hours of it.
+    # Detect what's happening right now. Calendar reminders are spoken in
+    # full every time -- each (event, range) pair only ever fires once (see
+    # CalendarAlert's own dedup), so unlike the browsing alerts there's no
+    # "still active next run" safety net; folding one into the "speak just
+    # one alert" pick below would silently lose it for good. The lookback
+    # for the browsing alerts covers the whole calendar day so far, since
+    # the YouTube limit alert needs today's full Shorts count, not just a
+    # few hours of it.
     now = datetime.now()
     hours_since_midnight = (now - datetime.combine(now.date(), datetime.min.time())).total_seconds() / 3600
     active = manager.detect_current(hours=max(3, hours_since_midnight))
+    calendar_matches = active.pop("calendar", None)
+    spoke_anything = False
+    if calendar_matches:
+        for reminder in calendar_matches:
+            message = manager.alerts["calendar"].speak_message([reminder])
+            print(message)
+            speak(message)
+        spoke_anything = True
+
     if active:
         names = list(active)
         if len(names) > 1:
@@ -871,7 +939,9 @@ def main(period: str = None):
         message = manager.alerts[name].speak_message(active[name])
         print(message)
         speak(message)
-    else:
+        spoke_anything = True
+
+    if not spoke_anything:
         print("No alert condition currently active.")
 
 
