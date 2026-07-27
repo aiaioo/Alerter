@@ -568,8 +568,8 @@ class CalendarReminder:
 
 class CalendarAlert(Alert):
     """e) Speaks appointment details once a timed calendar event falls
-    within a) 15-10, b) 10-5, or c) 5-0 minutes out, at most once per
-    event per range. All-day events have no specific time to count down
+    within a) 30-15, b) 15-10, c) 10-5, or d) 5-0 minutes out, at most once
+    per event per range. All-day events have no specific time to count down
     to, so they're ignored entirely. Takes any object exposing
     get_events(time_min, time_max) -> list of objects with summary,
     location, start, all_day, id (i.e. a googlecal.GoogleCal), so
@@ -585,6 +585,7 @@ class CalendarAlert(Alert):
 
     # (label, minutes-out upper bound (exclusive), minutes-out lower bound (inclusive))
     RANGES = (
+        ("30 to 15 minutes", timedelta(minutes=30), timedelta(minutes=15)),
         ("15 to 10 minutes", timedelta(minutes=15), timedelta(minutes=10)),
         ("10 to 5 minutes", timedelta(minutes=10), timedelta(minutes=5)),
         ("5 to 0 minutes", timedelta(minutes=5), timedelta(0)),
@@ -619,7 +620,7 @@ class CalendarAlert(Alert):
         now = (now or datetime.now()).astimezone()
         # Small backward buffer guards against an event whose start lands
         # exactly on 'now' being excluded by API/clock rounding.
-        events = self.google_cal.get_events(now - timedelta(minutes=1), now + timedelta(minutes=15))
+        events = self.google_cal.get_events(now - timedelta(minutes=1), now + timedelta(minutes=30))
 
         state = self._load_state()
         reminders = []
