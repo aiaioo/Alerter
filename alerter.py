@@ -469,7 +469,7 @@ class OffTopicAlert(Alert):
         # Work operations: travel booking sites
         "yatra.com", "makemytrip.com", "irctc.co.in",
         # Work operations: banking sites
-        "icici.com", "sbi.bank.in",
+        "icici.bank.in", "sbi.bank.in",
     }
     DEFAULT_KEYWORDS = {
         "ai", "machine learning", "deep learning", "neural network", "llm",
@@ -879,7 +879,7 @@ EXCLUDED_DOMAINS = {
     # Work operations: travel booking sites
     "yatra.com", "makemytrip.com", "irctc.co.in",
     # Work operations: banking sites
-    "icici.com", "sbi.bank.in",
+    "icici.bank.in", "sbi.bank.in",
 }
 
 
