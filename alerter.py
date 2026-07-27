@@ -437,6 +437,8 @@ class OffTopicAlert(Alert):
         "openai.com", "anthropic.com", "claude.ai", "chat.openai.com",
         "huggingface.co", "pytorch.org", "tensorflow.org", "kaggle.com",
         "leetcode.com", "realpython.com", "developer.mozilla.org", "readthedocs.io",
+    "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com",
+    "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "udemy.com", "coursera.org",
     }
     DEFAULT_KEYWORDS = {
         "ai", "machine learning", "deep learning", "neural network", "llm",
@@ -736,7 +738,7 @@ ALERT_MESSAGES = {
 # they're used.
 EXCLUDED_DOMAINS = {
     "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com",
-    "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", 
+    "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "coursera.org", "udemy.com", 
 }
 
 
