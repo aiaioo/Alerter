@@ -441,6 +441,29 @@ class OffTopicAlert(Alert):
     "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "udemy.com", "coursera.org",
     "vercel.com", "zapier.com", "azure.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com",
     "naukri.com",
+        # University AI/ML labs and research institutions
+        "stanford.edu", "mit.edu", "cmu.edu", "berkeley.edu", "cornell.edu", "nyu.edu",
+        "princeton.edu", "washington.edu", "ox.ac.uk", "ucl.ac.uk", "ed.ac.uk", "ethz.ch",
+        "mpg.de", "uva.nl", "tsinghua.edu.cn", "kaist.ac.kr", "nus.edu.sg", "biu.ac.il",
+        "nih.gov", "madry-lab.ml", "idsia.ch", "mila.quebec", "vectorinstitute.ai",
+        "humancompatible.ai",
+        # Industry AI research labs
+        "deepmind.google", "research.google", "ai.meta.com", "machinelearning.apple.com",
+        "amazon.science", "research.nvidia.com", "salesforceairesearch.com", "research.ibm.com",
+        "allenai.org", "eleuther.ai", "redwoodresearch.org", "alignmentresearchcenter.org",
+        "kyutai.org", "research.baidu.com", "damo.alibaba.com", "ai.tencent.com",
+        "seed.bytedance.com", "shlab.org.cn", "arcprize.org",
+        # AI researcher blogs and newsletters
+        "neelnanda.io", "thegradient.pub", "distill.pub", "alignmentforum.org",
+        "interconnects.ai", "sebastianraschka.com", "jack-clark.net", "deeplearning.ai",
+        "lastweekin.ai", "tldr.tech", "alphasignal.ai", "emergentmind.com", "scholar-inbox.com",
+        # Paper hosts, proceedings, and journals
+        "openreview.net", "semanticscholar.org", "paperswithcode.com", "arxiv-sanity-lite.com",
+        "aclanthology.org", "jmlr.org", "ecva.net", "isca-archive.org", "ojs.aaai.org",
+        "ijcai.org", "proceedings.mlr.press", "papers.nips.cc", "openaccess.thecvf.com",
+        "ieeexplore.ieee.org", "link.springer.com", "nature.com", "sciencedirect.com",
+        # Legal research and Indian government sites
+        "gov.in", "casemine.com", "scconline.com", "indiakanoon.org",
     }
     DEFAULT_KEYWORDS = {
         "ai", "machine learning", "deep learning", "neural network", "llm",
@@ -457,6 +480,12 @@ class OffTopicAlert(Alert):
         "job search", "career",
         # notes/productivity, characteristic of notion
         "note-taking", "wiki", "productivity",
+        # AI research literature, characteristic of university/industry research
+        # labs, researcher blogs, and paper hosts (stanford.edu, neelnanda.io, arxiv, etc.)
+        "research paper", "interpretability", "alignment", "reinforcement learning",
+        "computer vision", "natural language processing", "preprint", "benchmark",
+        # legal research, characteristic of casemine, scconline, indiakanoon, gov.in
+        "case law", "judgment", "legal research", "statute", "litigation", "court",
     }
 
     def __init__(self, allowed_domains=None, keywords=None, min_recent_visits=3, lookback_window=timedelta(minutes=15)):
@@ -751,7 +780,7 @@ def speak(message: str):
 ALERT_MESSAGES = {
     "doom_scroll": "I have detected that you are doom scrolling.",
     "long_form": "I have detected that you are watching long form content.",
-    "off_topic": "I have detected that you are browsing content unrelated to your learning goals.",
+    "off_topic": "I have detected that you are browsing content unrelated to your work and learning goals.",
     "youtube_limit": "I have detected that you have gone over your YouTube Shorts limit for today.",
 }
 
@@ -763,6 +792,29 @@ EXCLUDED_DOMAINS = {
     "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "coursera.org", "udemy.com",
     "vercel.com", "zapier.com", "azure.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com",
     "naukri.com",
+    # University AI/ML labs and research institutions
+    "stanford.edu", "mit.edu", "cmu.edu", "berkeley.edu", "cornell.edu", "nyu.edu",
+    "princeton.edu", "washington.edu", "ox.ac.uk", "ucl.ac.uk", "ed.ac.uk", "ethz.ch",
+    "mpg.de", "uva.nl", "tsinghua.edu.cn", "kaist.ac.kr", "nus.edu.sg", "biu.ac.il",
+    "nih.gov", "madry-lab.ml", "idsia.ch", "mila.quebec", "vectorinstitute.ai",
+    "humancompatible.ai",
+    # Industry AI research labs
+    "deepmind.google", "research.google", "ai.meta.com", "machinelearning.apple.com",
+    "amazon.science", "research.nvidia.com", "salesforceairesearch.com", "research.ibm.com",
+    "allenai.org", "eleuther.ai", "redwoodresearch.org", "alignmentresearchcenter.org",
+    "kyutai.org", "research.baidu.com", "damo.alibaba.com", "ai.tencent.com",
+    "seed.bytedance.com", "shlab.org.cn", "arcprize.org",
+    # AI researcher blogs and newsletters
+    "neelnanda.io", "thegradient.pub", "distill.pub", "alignmentforum.org",
+    "interconnects.ai", "sebastianraschka.com", "jack-clark.net", "deeplearning.ai",
+    "lastweekin.ai", "tldr.tech", "alphasignal.ai", "emergentmind.com", "scholar-inbox.com",
+    # Paper hosts, proceedings, and journals
+    "openreview.net", "semanticscholar.org", "paperswithcode.com", "arxiv-sanity-lite.com",
+    "aclanthology.org", "jmlr.org", "ecva.net", "isca-archive.org", "ojs.aaai.org",
+    "ijcai.org", "proceedings.mlr.press", "papers.nips.cc", "openaccess.thecvf.com",
+    "ieeexplore.ieee.org", "link.springer.com", "nature.com", "sciencedirect.com",
+    # Legal research and Indian government sites
+    "gov.in", "casemine.com", "scconline.com", "indiakanoon.org",
 }
 
 
