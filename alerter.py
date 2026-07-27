@@ -467,6 +467,8 @@ class OffTopicAlert(Alert):
         "karnatakamedicalcouncil.com",
         # Work operations: travel booking sites
         "yatra.com", "makemytrip.com", "irctc.co.in",
+        # Work operations: banking sites
+        "icici.com", "sbi.bank.in",
     }
     DEFAULT_KEYWORDS = {
         "ai", "machine learning", "deep learning", "neural network", "llm",
@@ -821,6 +823,8 @@ EXCLUDED_DOMAINS = {
     "karnatakamedicalcouncil.com",
     # Work operations: travel booking sites
     "yatra.com", "makemytrip.com", "irctc.co.in",
+    # Work operations: banking sites
+    "icici.com", "sbi.bank.in",
 }
 
 
