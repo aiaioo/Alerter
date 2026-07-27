@@ -377,13 +377,13 @@ class Alert:
         """Return the list of Period matches for this condition."""
         raise NotImplementedError
 
-    def active_matches(self, visits, now=None, recent_window=timedelta(minutes=10)):
+    def active_matches(self, visits, now=None, recent_window=timedelta(minutes=5)):
         """Return the subset of evaluate()'s matches that are current right
         now, i.e. worth speaking an alert about."""
         now = now or datetime.now()
         return [p for p in self.evaluate(visits) if p.end >= now - recent_window]
 
-    def is_active_now(self, visits, now=None, recent_window=timedelta(minutes=10)):
+    def is_active_now(self, visits, now=None, recent_window=timedelta(minutes=5)):
         return bool(self.active_matches(visits, now, recent_window))
 
     def speak_message(self, matches):
@@ -461,7 +461,7 @@ class OffTopicAlert(Alert):
     def evaluate(self, visits):
         return [Period(v.domain, v.time, v.time, 1) for v in visits if v.domain and not self._is_on_topic(v)]
 
-    def active_matches(self, visits, now=None, recent_window=timedelta(minutes=10)):
+    def active_matches(self, visits, now=None, recent_window=timedelta(minutes=5)):
         now = now or datetime.now()
         recent = [p for p in self.evaluate(visits) if p.end >= now - recent_window]
         return recent if len(recent) >= self.min_recent_visits else []
@@ -600,11 +600,13 @@ class AlertManager:
         visits = self.read_visits(hours)
         return {name: alert.evaluate(visits) for name, alert in self.alerts.items()}
 
-    def detect_current(self, hours: int = 3, recent_window=timedelta(minutes=10)):
+    def detect_current(self, hours: int = 3, recent_window=timedelta(minutes=5)):
         """Return {name: matches} for every alert whose condition is active
         right now (i.e. its most recent match fell within recent_window,
         or -- for alerts like CalendarAlert that define their own notion of
-        'current' -- whatever active_matches() returns)."""
+        'current' -- whatever active_matches() returns). recent_window
+        matches the cron cadence (every 5 minutes) so a still-recent match
+        from the previous run doesn't get spoken about a second time."""
         visits = self.read_visits(hours)
         now = datetime.now()
         active = {}
