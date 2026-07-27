@@ -465,6 +465,8 @@ class OffTopicAlert(Alert):
         # Legal research and Indian government sites
         "gov.in", "casemine.com", "scconline.com", "indiakanoon.org",
         "karnatakamedicalcouncil.com",
+        # Travel booking sites
+        "yatra.com", "makemytrip.com", "irctc.co.in",
     }
     DEFAULT_KEYWORDS = {
         "ai", "machine learning", "deep learning", "neural network", "llm",
@@ -817,6 +819,8 @@ EXCLUDED_DOMAINS = {
     # Legal research and Indian government sites
     "gov.in", "casemine.com", "scconline.com", "indiakanoon.org",
     "karnatakamedicalcouncil.com",
+    # Travel booking sites
+    "yatra.com", "makemytrip.com", "irctc.co.in",
 }
 
 
