@@ -477,6 +477,8 @@ class OffTopicAlert(Alert):
         "yatra.com", "makemytrip.com", "irctc.co.in",
         # Work operations: banking sites
         "icici.bank.in", "sbi.bank.in",
+        # Procurement operations: online ordering sites
+        "amazon.in", "robu.in", "sharvielectronics.com", "ktron.in", "flipkart.com", "roboticsdna.in",
     }
     DEFAULT_KEYWORDS = {
         "ai", "machine learning", "deep learning", "neural network", "llm",
@@ -1041,6 +1043,8 @@ EXCLUDED_DOMAINS = {
     "yatra.com", "makemytrip.com", "irctc.co.in",
     # Work operations: banking sites
     "icici.bank.in", "sbi.bank.in",
+    # Procurement operations: online ordering sites
+    "amazon.in", "robu.in", "sharvielectronics.com", "ktron.in", "flipkart.com", "roboticsdna.in",
 }
 
 
