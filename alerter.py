@@ -7,6 +7,7 @@ and off-topic browsing.
 import argparse
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -433,6 +434,12 @@ class OffTopicAlert(Alert):
 
     name = "off_topic"
 
+    # Local development/testing endpoints (localhost, loopback, and private
+    # 192.168.x.x LAN addresses), with or without a port -- always on-topic.
+    LOCAL_DEV_HOST_RE = re.compile(
+        r"^(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?$"
+    )
+
     DEFAULT_ALLOWED_DOMAINS = {
         "github.com", "stackoverflow.com", "docs.python.org", "arxiv.org",
         "openai.com", "anthropic.com", "claude.ai", "chat.openai.com",
@@ -504,6 +511,8 @@ class OffTopicAlert(Alert):
         self.lookback_window = lookback_window
 
     def _is_on_topic(self, visit: Visit) -> bool:
+        if self.LOCAL_DEV_HOST_RE.match(visit.domain):
+            return True
         if any(visit.domain == d or visit.domain.endswith("." + d) for d in self.allowed_domains):
             return True
         haystack = f"{visit.url} {visit.title}".lower()
