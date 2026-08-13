@@ -445,12 +445,12 @@ class OffTopicAlert(Alert):
         "openai.com", "anthropic.com", "claude.ai", "chat.openai.com",
         "huggingface.co", "pytorch.org", "tensorflow.org", "kaggle.com",
         "leetcode.com", "realpython.com", "developer.mozilla.org", "readthedocs.io",
-    "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com",
+    "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com", "slack.com", "easyeda.com", "okta.com", "amazon.com",
     "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "udemy.com", "coursera.org",
     "vercel.com", "zapier.com", "azure.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com",
     "naukri.com",
         # University AI/ML labs and research institutions
-        "stanford.edu", "mit.edu", "cmu.edu", "berkeley.edu", "cornell.edu", "nyu.edu",
+        "stanford.edu", "mit.edu", "cmu.edu", "berkeley.edu", "cornell.edu", "nyu.edu", "neelnanda.io", "trustpilot.com", "realpython.com",
         "princeton.edu", "washington.edu", "ox.ac.uk", "ucl.ac.uk", "ed.ac.uk", "ethz.ch",
         "mpg.de", "uva.nl", "tsinghua.edu.cn", "kaist.ac.kr", "nus.edu.sg", "biu.ac.il",
         "nih.gov", "madry-lab.ml", "idsia.ch", "mila.quebec", "vectorinstitute.ai",
@@ -1011,12 +1011,12 @@ ALERT_MESSAGES = {
 # long-form, off-topic, or YouTube-limit alerts for these, no matter how
 # they're used.
 EXCLUDED_DOMAINS = {
-    "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com",
+    "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com", "slack.com", "easyeda.com", "okta.com", "amazon.com",
     "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "coursera.org", "udemy.com",
     "vercel.com", "zapier.com", "azure.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com",
     "naukri.com",
     # University AI/ML labs and research institutions
-    "stanford.edu", "mit.edu", "cmu.edu", "berkeley.edu", "cornell.edu", "nyu.edu",
+    "stanford.edu", "mit.edu", "cmu.edu", "berkeley.edu", "cornell.edu", "nyu.edu", "neelnanda.io", "trustpilot.com", "realpython.com",
     "princeton.edu", "washington.edu", "ox.ac.uk", "ucl.ac.uk", "ed.ac.uk", "ethz.ch",
     "mpg.de", "uva.nl", "tsinghua.edu.cn", "kaist.ac.kr", "nus.edu.sg", "biu.ac.il",
     "nih.gov", "madry-lab.ml", "idsia.ch", "mila.quebec", "vectorinstitute.ai",
