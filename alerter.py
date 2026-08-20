@@ -445,7 +445,7 @@ class OffTopicAlert(Alert):
         "openai.com", "anthropic.com", "claude.ai", "chat.openai.com",
         "huggingface.co", "pytorch.org", "tensorflow.org", "kaggle.com",
         "leetcode.com", "realpython.com", "developer.mozilla.org", "readthedocs.io",
-    "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com", "slack.com", "easyeda.com", "okta.com", "amazon.com",
+    "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com", "slack.com", "okta.com", "alignerr.com", "easyeda.com", "lioncircuits.com", "okta.com", "amazon.com",
     "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "udemy.com", "coursera.org",
     "vercel.com", "zapier.com", "azure.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com",
     "naukri.com",
@@ -687,21 +687,11 @@ class WakeUpAlert(Alert):
     once per weekday (Monday-Friday; getting to work on time isn't a
     weekend concern), tracked in a small JSON state file the same way
     CalendarAlert dedups (event, range) pairs, since this script runs
-    fresh on every cron invocation rather than staying resident.
-
-    A weekday can still be opted out of by adding an all-day calendar event
-    whose summary contains EXCEPTION_KEYWORD (e.g. "nowake - traveling"),
-    checked via the same GoogleCal object CalendarAlert uses. Passing no
-    google_cal simply disables this check, same as CalendarAlert being
-    unavailable."""
+    fresh on every cron invocation rather than staying resident."""
 
     name = "wake_up"
 
     WEEKDAYS = {0, 1, 2, 3, 4}  # Monday .. Friday
-
-    # Case-insensitive substring: any all-day event on a given day whose
-    # summary contains this marks that day as a wake-up exception.
-    EXCEPTION_KEYWORD = "nowake"
 
     # How long an alerted-state entry is kept before being pruned, so the
     # state file doesn't grow forever across a long-running periodic script.
@@ -716,8 +706,8 @@ class WakeUpAlert(Alert):
     DEFAULT_STAGES = (
         WakeUpStage(
             "wake", timedelta(minutes=75), timedelta(minutes=5), False,
-            "Wake up! Wake up! It's {wake_time}. Look there. The sun is up "
-            "already. It's time to go to work! Open the window. Wake up. "
+            "It's {wake_time}. Wake up!"
+            "It's time to go to work."
             "Brush your teeth.",
         ),
         WakeUpStage(
@@ -741,14 +731,13 @@ class WakeUpAlert(Alert):
     )
 
     def __init__(self, arrival_time: time = time(8, 0), commute: timedelta = timedelta(minutes=75),
-                 stages=None, state_file=None, base_dir=None, google_cal=None):
+                 stages=None, state_file=None, base_dir=None):
         self.arrival_time = arrival_time
         self.commute = commute
         self.stages = stages if stages is not None else self.DEFAULT_STAGES
         self.state_file = Path(state_file) if state_file else (
             Path(base_dir) if base_dir else Path(__file__).resolve().parent
         ) / "wake_up_alert_state.json"
-        self.google_cal = google_cal
 
     def _load_state(self) -> dict:
         if not self.state_file.exists():
@@ -767,22 +756,9 @@ class WakeUpAlert(Alert):
     def _leave_time(self, now: datetime) -> datetime:
         return datetime.combine(now.date(), self.arrival_time) - self.commute
 
-    def _is_exception_day(self, now: datetime) -> bool:
-        """True if today has an all-day event whose summary contains
-        EXCEPTION_KEYWORD, e.g. a holiday or travel day marked 'nowake'."""
-        if not self.google_cal:
-            return False
-        events = self.google_cal.get_events_for_day(now.date())
-        return any(
-            event.all_day and self.EXCEPTION_KEYWORD in event.summary.lower()
-            for event in events
-        )
-
     def evaluate(self, visits=None, now=None):
         now = now or datetime.now()
         if now.weekday() not in self.WEEKDAYS:
-            return []
-        if self._is_exception_day(now):
             return []
         leave_time = self._leave_time(now)
         wake_time_str = (leave_time - self.stages[0].offset).strftime("%I:%M").lstrip("0")
@@ -1011,7 +987,7 @@ ALERT_MESSAGES = {
 # long-form, off-topic, or YouTube-limit alerts for these, no matter how
 # they're used.
 EXCLUDED_DOMAINS = {
-    "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com", "slack.com", "easyeda.com", "okta.com", "amazon.com",
+    "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com", "slack.com", "okta.com", "alignerr.com", "easyeda.com", "lioncircuits.com", "okta.com", "amazon.com",
     "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "coursera.org", "udemy.com",
     "vercel.com", "zapier.com", "azure.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com",
     "naukri.com",
@@ -1060,18 +1036,15 @@ def main(period: str = None):
 
     # Calendar access is optional: googlecal.py pulls in the Google API
     # client libraries and OAuth credentials, neither of which the browsing
-    # alerts need, so their absence shouldn't break this script. When
-    # available, the same GoogleCal is shared with WakeUpAlert so it can
-    # skip days marked with its EXCEPTION_KEYWORD ('nowake').
-    google_cal = None
+    # alerts (or WakeUpAlert, which is clock-only) need, so their absence
+    # shouldn't break this script.
     try:
         from googlecal import GoogleCal
-        google_cal = GoogleCal()
-        manager.add_alert(CalendarAlert(google_cal))
+        manager.add_alert(CalendarAlert(GoogleCal()))
     except (ImportError, FileNotFoundError) as e:
         print(f"Note: calendar reminders disabled ({e}).")
 
-    manager.add_alert(WakeUpAlert(google_cal=google_cal))
+    manager.add_alert(WakeUpAlert())
 
     if period is not None:
         if period not in PERIOD_HOURS:
