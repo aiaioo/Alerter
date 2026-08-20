@@ -360,6 +360,13 @@ def _sessions_for_condition(visits, gap_ok, min_duration):
 
 YOUTUBE_DOMAINS = {"youtube.com", "m.youtube.com"}
 
+# Local development/testing endpoints (localhost, loopback, and private
+# 192.168.x.x LAN addresses), with or without a port -- never flagged by
+# any alert, since they're not "content" to doom-scroll or drift off-topic on.
+LOCAL_DEV_HOST_RE = re.compile(
+    r"^(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?$"
+)
+
 
 def _is_youtube_short(visit: Visit) -> bool:
     """True if visit is a YouTube Short (short-form content), identified by URL path."""
@@ -406,7 +413,8 @@ class DoomScrollAlert(Alert):
         self.min_duration = min_duration
 
     def evaluate(self, visits):
-        return _sessions_for_condition(visits, lambda gap: gap < self.max_gap, self.min_duration)
+        candidates = [v for v in visits if not LOCAL_DEV_HOST_RE.match(v.domain)]
+        return _sessions_for_condition(candidates, lambda gap: gap < self.max_gap, self.min_duration)
 
 
 class LongFormAlert(Alert):
@@ -433,12 +441,6 @@ class OffTopicAlert(Alert):
     """c) Any URL unrelated to configured learning goals (default: AI & programming)."""
 
     name = "off_topic"
-
-    # Local development/testing endpoints (localhost, loopback, and private
-    # 192.168.x.x LAN addresses), with or without a port -- always on-topic.
-    LOCAL_DEV_HOST_RE = re.compile(
-        r"^(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?$"
-    )
 
     DEFAULT_ALLOWED_DOMAINS = {
         "github.com", "stackoverflow.com", "docs.python.org", "arxiv.org",
@@ -513,7 +515,7 @@ class OffTopicAlert(Alert):
         self.lookback_window = lookback_window
 
     def _is_on_topic(self, visit: Visit) -> bool:
-        if self.LOCAL_DEV_HOST_RE.match(visit.domain):
+        if LOCAL_DEV_HOST_RE.match(visit.domain):
             return True
         if any(visit.domain == d or visit.domain.endswith("." + d) for d in self.allowed_domains):
             return True
