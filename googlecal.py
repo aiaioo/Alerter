@@ -1,21 +1,41 @@
 #!/usr/bin/env python3
-"""Reads events from a Google Calendar and reports on appointments for the
-current day, week, or month.
+"""Reads events from a *public* Google Calendar and reports on appointments
+for the current day, week, or month. Uses the calendar's published iCal
+feed over plain HTTP -- no Google API client, no OAuth, nothing for anyone
+running this to authenticate.
 """
 
 import argparse
+import base64
 import datetime as dt
-import os.path
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import parse_qs, quote, urlparse
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
+import recurring_ical_events
+import requests
+from icalendar import Calendar
 
-# Read-only is enough for reporting; never request write access here.
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+# The calendar's public share link, e.g. from Google Calendar's "Settings and
+# sharing" page for a calendar with "Make available to public" turned on.
+# The 'cid' query param is just the calendar ID (its owner's email, for a
+# primary calendar), base64-encoded.
+DEFAULT_SHARE_URL = (
+    "https://calendar.google.com/calendar/u/1"
+    "?cid=OTQ0ZDgwODBjNTcxMjQ2MmNmZDRlMzJkMjBjYjI4ZTdjZWQ5ZjNhZjU0ZjljODg3OGNiYjkwNWRkZGY5NTgyYUBncm91cC5jYWxlbmRhci5nb29nbGUuY29t"
+)
+
+ICS_URL_TEMPLATE = "https://calendar.google.com/calendar/ical/{calendar_id}/public/basic.ics"
+
+
+def _calendar_id_from_share_url(share_url: str) -> str:
+    """Pull the calendar ID out of a 'calendar.google.com/calendar/u/N?cid=...'
+    share link -- the cid is the calendar ID, base64-encoded."""
+    cid = parse_qs(urlparse(share_url).query).get("cid")
+    if not cid:
+        raise ValueError(f"Share URL has no 'cid' parameter: {share_url!r}")
+    padded = cid[0] + "=" * (-len(cid[0]) % 4)
+    return base64.urlsafe_b64decode(padded).decode()
 
 
 @dataclass
@@ -29,99 +49,86 @@ class Event:
 
 
 class GoogleCal:
-    """Authenticates against the Google Calendar API and fetches events for
-    a given time range, or for the current day/week/month.
+    """Reads events from a Google Calendar via its published iCal feed.
 
-    Setup:
-      1. In Google Cloud Console, enable the "Google Calendar API" and create
-         an OAuth 2.0 Client ID of type "Desktop app".
-      2. Download the client secret JSON and save it as 'credentials.json'
-         next to this file (or pass credentials_file=... explicitly).
-      3. On first use, a browser window opens for you to grant access; the
-         resulting token is cached in 'token.json' so future runs don't
-         prompt again (refreshed automatically once expired).
+    This only works for a calendar shared publicly -- there's no login, so
+    there's nothing private to protect. To make a calendar readable this
+    way:
+      1. In Google Calendar, open Settings for the calendar to share.
+      2. Under "Access permissions", check "Make available to public"
+         (either "See only free/busy" or "See all event details").
+      3. Grab that calendar's share link (Settings > "Integrate calendar" >
+         "Public URL to this calendar", or the link from the calendar's
+         three-dot menu > "Settings and sharing") and pass it as
+         share_url=, or just pass its calendar ID (usually its owner's
+         email address) as calendar_id=.
+
+    Anyone can then read that calendar's events with no credentials of
+    their own.
     """
 
-    def __init__(self, base_dir: str = None, credentials_file: str = "credentials.json",
-                 token_file: str = "token.json", calendar_id: str = "primary"):
+    def __init__(self, calendar_id: str = None, share_url: str = None,
+                 base_dir: str = None, timeout: float = 10.0):
         self.base_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parent
-        self.credentials_file = self.base_dir / credentials_file
-        self.token_file = self.base_dir / token_file
+        if calendar_id is None:
+            calendar_id = _calendar_id_from_share_url(share_url or DEFAULT_SHARE_URL)
         self.calendar_id = calendar_id
-        self._service = None
-
-    # -- authentication ----------------------------------------------------
-
-    def _authenticate(self) -> Credentials:
-        creds = None
-        if self.token_file.exists():
-            creds = Credentials.from_authorized_user_file(str(self.token_file), SCOPES)
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                if not self.credentials_file.exists():
-                    raise FileNotFoundError(
-                        f"Missing OAuth client secret at {self.credentials_file}. "
-                        "Download it from Google Cloud Console (APIs & Services > "
-                        "Credentials) and save it there. See GoogleCal's docstring "
-                        "for full setup steps."
-                    )
-                flow = InstalledAppFlow.from_client_secrets_file(str(self.credentials_file), SCOPES)
-                creds = flow.run_local_server(port=0)
-            self.token_file.write_text(creds.to_json())
-        return creds
-
-    @property
-    def service(self):
-        if self._service is None:
-            self._service = build("calendar", "v3", credentials=self._authenticate())
-        return self._service
+        self.ics_url = ICS_URL_TEMPLATE.format(calendar_id=quote(calendar_id, safe=""))
+        self.timeout = timeout
 
     # -- fetching ------------------------------------------------------------
 
+    def _fetch_calendar(self) -> Calendar:
+        response = requests.get(self.ics_url, timeout=self.timeout)
+        if response.status_code == 404:
+            raise RuntimeError(
+                f"No public calendar feed at {self.ics_url}. The calendar must have "
+                "'Make available to public' turned on (Settings and sharing > "
+                "Access permissions) for this to work without authentication."
+            )
+        response.raise_for_status()
+        return Calendar.from_ical(response.content)
+
     @staticmethod
-    def _parse_event(raw: dict) -> Event:
-        start_raw = raw["start"].get("dateTime", raw["start"].get("date"))
-        end_raw = raw["end"].get("dateTime", raw["end"].get("date"))
-        all_day = "date" in raw["start"] and "dateTime" not in raw["start"]
+    def _parse_occurrence(raw) -> Event:
+        start = raw["DTSTART"].dt
+        end = raw["DTEND"].dt if "DTEND" in raw else start
+        all_day = not isinstance(start, dt.datetime)
         if all_day:
-            start = dt.datetime.fromisoformat(start_raw)
-            end = dt.datetime.fromisoformat(end_raw)
+            start = dt.datetime.combine(start, dt.time.min)
+            end = dt.datetime.combine(end, dt.time.min)
         else:
-            start = dt.datetime.fromisoformat(start_raw)
-            end = dt.datetime.fromisoformat(end_raw)
+            if start.tzinfo is None:
+                start = start.astimezone()
+            if end.tzinfo is None:
+                end = end.astimezone()
+        uid = str(raw.get("UID", ""))
         return Event(
-            summary=raw.get("summary", "(no title)"),
+            summary=str(raw.get("SUMMARY", "(no title)")),
             start=start,
             end=end,
-            location=raw.get("location", ""),
+            location=str(raw.get("LOCATION", "")),
             all_day=all_day,
-            id=raw.get("id", ""),
+            # Recurring events share one UID across every occurrence, so a
+            # single occurrence is identified by UID + its own start time
+            # (mirroring the per-occurrence IDs the old Calendar API gave
+            # expanded recurring events).
+            id=f"{uid}|{start.isoformat()}" if uid else "",
         )
 
     def get_events(self, time_min: dt.datetime, time_max: dt.datetime) -> list[Event]:
-        """Fetch every event on the calendar starting in [time_min, time_max),
-        sorted by start time. Naive datetimes are assumed to be local time."""
+        """Fetch every event occurrence overlapping [time_min, time_max),
+        sorted by start time, with recurring events expanded. Naive
+        datetimes are assumed to be local time."""
         if time_min.tzinfo is None:
             time_min = time_min.astimezone()
         if time_max.tzinfo is None:
             time_max = time_max.astimezone()
 
-        events, page_token = [], None
-        while True:
-            response = self.service.events().list(
-                calendarId=self.calendar_id,
-                timeMin=time_min.isoformat(),
-                timeMax=time_max.isoformat(),
-                singleEvents=True,
-                orderBy="startTime",
-                pageToken=page_token,
-            ).execute()
-            events.extend(self._parse_event(item) for item in response.get("items", []))
-            page_token = response.get("nextPageToken")
-            if not page_token:
-                break
+        calendar = self._fetch_calendar()
+        occurrences = recurring_ical_events.of(calendar).between(time_min, time_max)
+        events = [self._parse_occurrence(occ) for occ in occurrences]
+        events.sort(key=lambda e: e.start)
         return events
 
     # -- convenience windows -------------------------------------------------

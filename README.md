@@ -249,7 +249,7 @@ It takes any object exposing `get_events(time_min, time_max)` (i.e. a
 `GoogleCal`), so `alerter.py` itself never imports `googlecal.py` — that
 import only happens where you wire the two together (`main()` does this
 lazily too, so the browsing alerts still work if `googlecal.py`'s
-dependencies or credentials aren't set up).
+dependencies aren't installed, or the calendar feed can't be reached).
 
 Each match is a `CalendarReminder(summary, location, start, lead)`. Because
 a reminder needs to speak details specific to *which* event and *which*
@@ -399,8 +399,10 @@ with `cron` or `launchd`, every few minutes:
 
 ## `googlecal.py`: Google Calendar reports
 
-`googlecal.py` reads your Google Calendar and reports on appointments for
-the current day, week, or month.
+`googlecal.py` reads a Google Calendar and reports on appointments for the
+current day, week, or month. It reads the calendar's public iCal feed over
+plain HTTP — no Google API client, no OAuth, nothing to authenticate. That
+also means it only works for a calendar that's shared publicly.
 
 ### Requirements
 
@@ -408,19 +410,17 @@ the current day, week, or month.
 pip install -r requirements.txt
 ```
 
-Then in Google Cloud Console:
+Then, for the calendar to read from:
 
-1. Enable the "Google Calendar API" for a project.
-2. Create an OAuth 2.0 Client ID of type "Desktop app" (APIs & Services >
-   Credentials).
-3. Download the client secret JSON and save it as `credentials.json` next
-   to `googlecal.py`.
+1. In Google Calendar, open Settings for that calendar.
+2. Under "Access permissions", check "Make available to public" (either
+   "See only free/busy" or "See all event details").
+3. Grab its share link (Settings and sharing, or the calendar's three-dot
+   menu) — it looks like `https://calendar.google.com/calendar/u/1?cid=...`
+   — or just note its calendar ID (usually its owner's email address).
 
-On first use a browser window opens to grant access; the resulting token is
-cached in `token.json` next to `googlecal.py` so future runs don't prompt
-again (refreshed automatically once expired). Both `credentials.json` and
-`token.json` hold sensitive access to your calendar — they're already
-covered by `.gitignore`, don't commit or share them.
+There's nothing to install locally and nothing sensitive to protect, since
+the calendar has to be public for this to work at all.
 
 ### Quick start
 
@@ -436,7 +436,9 @@ python3 googlecal.py month       # appointments for the current calendar month
 ```python
 from googlecal import GoogleCal
 
-cal = GoogleCal()                        # looks for credentials.json/token.json next to googlecal.py
+cal = GoogleCal()                        # uses the default share link baked into googlecal.py
+cal = GoogleCal(share_url="https://calendar.google.com/calendar/u/1?cid=...")
+cal = GoogleCal(calendar_id="someone@example.com")
 events = cal.get_events_for_day()        # today; pass a date to target a different day
 events = cal.get_events_for_week()       # current Mon-Sun calendar week
 events = cal.get_events_for_month()      # current calendar month

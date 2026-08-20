@@ -1034,14 +1034,17 @@ def main(period: str = None):
     manager.add_alert(OffTopicAlert())
     manager.add_alert(YouTubeLimitAlert())
 
-    # Calendar access is optional: googlecal.py pulls in the Google API
-    # client libraries and OAuth credentials, neither of which the browsing
-    # alerts (or WakeUpAlert, which is clock-only) need, so their absence
-    # shouldn't break this script.
+    # Calendar access is optional: googlecal.py pulls in a couple of extra
+    # libraries for reading the public iCal feed, which the browsing alerts
+    # (or WakeUpAlert, which is clock-only) don't need, so their absence
+    # shouldn't break this script. Feed-fetch failures (e.g. the calendar
+    # not being public, or a network hiccup) surface per-run as a warning
+    # from AlertManager.check_alerts instead, since they can only be
+    # detected once googlecal.py actually tries to fetch.
     try:
         from googlecal import GoogleCal
         manager.add_alert(CalendarAlert(GoogleCal()))
-    except (ImportError, FileNotFoundError) as e:
+    except ImportError as e:
         print(f"Note: calendar reminders disabled ({e}).")
 
     manager.add_alert(WakeUpAlert())
