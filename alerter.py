@@ -449,7 +449,7 @@ class OffTopicAlert(Alert):
         "leetcode.com", "realpython.com", "developer.mozilla.org", "readthedocs.io",
     "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com", "slack.com", "okta.com", "alignerr.com", "easyeda.com", "lioncircuits.com", "okta.com", "amazon.com", "alibaba.com",
     "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "udemy.com", "coursera.org",
-    "vercel.com", "zapier.com", "azure.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com",
+    "vercel.com", "zapier.com", "azure.com", "microsoft.com", "zoom.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com",
     "naukri.com",
         # University AI/ML labs and research institutions
         "stanford.edu", "mit.edu", "cmu.edu", "berkeley.edu", "cornell.edu", "nyu.edu", "neelnanda.io", "trustpilot.com", "realpython.com",
@@ -991,7 +991,7 @@ ALERT_MESSAGES = {
 EXCLUDED_DOMAINS = {
     "linkedin.com", "mercor.com", "alignerr.com", "turing.com", "gmail.com", "google.com", "slack.com", "okta.com", "alignerr.com", "easyeda.com", "lioncircuits.com", "okta.com", "amazon.com", "alibaba.com",
     "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "coursera.org", "udemy.com",
-    "vercel.com", "zapier.com", "azure.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com",
+    "vercel.com", "zapier.com", "azure.com", "microsoft.com", "zoom.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com",
     "naukri.com",
     # University AI/ML labs and research institutions
     "stanford.edu", "mit.edu", "cmu.edu", "berkeley.edu", "cornell.edu", "nyu.edu", "neelnanda.io", "trustpilot.com", "realpython.com",
