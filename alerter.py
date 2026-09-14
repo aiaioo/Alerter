@@ -443,7 +443,7 @@ class OffTopicAlert(Alert):
     name = "off_topic"
 
     DEFAULT_ALLOWED_DOMAINS = {
-        "github.com", "github.io", "stackoverflow.com", "docs.python.org", "arxiv.org",
+        "github.com", "github.io", "stackoverflow.com", "docs.python.org", "arxiv.org", "aclanthology.org",
         "openai.com", "anthropic.com", "claude.ai", "chat.openai.com",
         "huggingface.co", "pytorch.org", "tensorflow.org", "kaggle.com",
         "leetcode.com", "realpython.com", "developer.mozilla.org", "readthedocs.io",
@@ -990,7 +990,7 @@ ALERT_MESSAGES = {
 # they're used.
 EXCLUDED_DOMAINS = {
     "linkedin.com", "mercor.com", "alignerr.com", "labelbox.com", "turing.com", "gmail.com", "google.com", "slack.com", "okta.com", "alignerr.com", "easyeda.com", "lioncircuits.com", "okta.com", "amazon.com", "alibaba.com",
-    "arxiv.org", "github.com", "github.io", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "coursera.org", "udemy.com", "udemycdn.com",
+    "arxiv.org", "aclanthology.org", "github.com", "github.io", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "coursera.org", "udemy.com", "udemycdn.com",
     "vercel.com", "zapier.com", "azure.com", "microsoft.com", "zoom.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com",
     "naukri.com", "shine.com", "ashbyhq.com", "myworkdayjobs.com",
     # University AI/ML labs and research institutions
