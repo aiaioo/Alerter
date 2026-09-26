@@ -473,7 +473,7 @@ class OffTopicAlert(Alert):
         "ijcai.org", "proceedings.mlr.press", "papers.nips.cc", "openaccess.thecvf.com",
         "ieeexplore.ieee.org", "link.springer.com", "nature.com", "sciencedirect.com",
         # Legal research and Indian government sites
-        "gov.in", "casemine.com", "scconline.com", "indiakanoon.org",
+        "gov.in", "casemine.com", "scconline.com", "indiakanoon.org", "indiacode.nic.in", "wikipedia.org",
         "karnatakamedicalcouncil.com",
         # Work operations: travel booking sites
         "yatra.com", "makemytrip.com", "irctc.co.in",
@@ -1015,7 +1015,7 @@ EXCLUDED_DOMAINS = {
     "ijcai.org", "proceedings.mlr.press", "papers.nips.cc", "openaccess.thecvf.com",
     "ieeexplore.ieee.org", "link.springer.com", "nature.com", "sciencedirect.com",
     # Legal research and Indian government sites
-    "gov.in", "casemine.com", "scconline.com", "indiakanoon.org",
+    "gov.in", "casemine.com", "scconline.com", "indiakanoon.org", "indiacode.nic.in", "wikipedia.org",
     "karnatakamedicalcouncil.com",
     # Work operations: travel booking sites
     "yatra.com", "makemytrip.com", "irctc.co.in",
