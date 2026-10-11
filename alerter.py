@@ -448,8 +448,8 @@ class OffTopicAlert(Alert):
         "huggingface.co", "pytorch.org", "tensorflow.org", "kaggle.com",
         "leetcode.com", "realpython.com", "developer.mozilla.org", "readthedocs.io",
     "linkedin.com", "mercor.com", "alignerr.com", "labelbox.com", "turing.com", "gmail.com", "google.com", "slack.com", "okta.com", "alignerr.com", "easyeda.com", "lioncircuits.com", "okta.com", "amazon.com", "alibaba.com",
-    "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "udemy.com", "udemycdn.com", "coursera.org", "nls.ac.in",
-    "vercel.com", "zapier.com", "azure.com", "microsoft.com", "zoom.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com", "cloud.microsoft",
+    "arxiv.org", "github.com", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "udemy.com", "udemycdn.com", "coursera.org", "nls.ac.in", "caseplan.in",
+    "vercel.com", "zapier.com", "azure.com", "microsoft.com", "zoom.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com", "cloud.microsoft", "postmarkapp.com",
     "naukri.com", "shine.com", "ashbyhq.com", "myworkdayjobs.com",
         # University AI/ML labs and research institutions
         "stanford.edu", "mit.edu", "cmu.edu", "berkeley.edu", "cornell.edu", "nyu.edu", "neelnanda.io", "trustpilot.com", "realpython.com",
@@ -473,7 +473,7 @@ class OffTopicAlert(Alert):
         "ijcai.org", "proceedings.mlr.press", "papers.nips.cc", "openaccess.thecvf.com",
         "ieeexplore.ieee.org", "link.springer.com", "nature.com", "sciencedirect.com",
         # Legal research and Indian government sites
-        "gov.in", "casemine.com", "scconline.com", "indiakanoon.org", "indiacode.nic.in", "wikipedia.org",
+        "gov.in", "casemine.com", "scconline.com", "indiakanoon.org", "indiacode.nic.in", "nic.in", "wikipedia.org",
         "karnatakamedicalcouncil.com",
         # Work operations: travel booking sites
         "yatra.com", "makemytrip.com", "irctc.co.in",
@@ -990,8 +990,8 @@ ALERT_MESSAGES = {
 # they're used.
 EXCLUDED_DOMAINS = {
     "linkedin.com", "mercor.com", "alignerr.com", "labelbox.com", "turing.com", "gmail.com", "google.com", "slack.com", "okta.com", "alignerr.com", "easyeda.com", "lioncircuits.com", "okta.com", "amazon.com", "alibaba.com",
-    "arxiv.org", "aclanthology.org", "github.com", "github.io", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "coursera.org", "udemy.com", "udemycdn.com", "nls.ac.in",
-    "vercel.com", "zapier.com", "azure.com", "microsoft.com", "zoom.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com", "cloud.microsoft",
+    "arxiv.org", "aclanthology.org", "github.com", "github.io", "kaggle.com", "notion.com", "mechanicalchef.com", "aiaioo.com", "medicalsafety.in", "coursera.org", "udemy.com", "udemycdn.com", "nls.ac.in", "caseplan.in",
+    "vercel.com", "zapier.com", "azure.com", "microsoft.com", "zoom.com", "aws.amazon.com", "digitalocean.com", "linode.com", "akamai.com", "porkbun.com", "firebase.google.com", "cloud.microsoft", "postmarkapp.com",
     "naukri.com", "shine.com", "ashbyhq.com", "myworkdayjobs.com",
     # University AI/ML labs and research institutions
     "stanford.edu", "mit.edu", "cmu.edu", "berkeley.edu", "cornell.edu", "nyu.edu", "neelnanda.io", "trustpilot.com", "realpython.com",
@@ -1015,7 +1015,7 @@ EXCLUDED_DOMAINS = {
     "ijcai.org", "proceedings.mlr.press", "papers.nips.cc", "openaccess.thecvf.com",
     "ieeexplore.ieee.org", "link.springer.com", "nature.com", "sciencedirect.com",
     # Legal research and Indian government sites
-    "gov.in", "casemine.com", "scconline.com", "indiakanoon.org", "indiacode.nic.in", "wikipedia.org",
+    "gov.in", "casemine.com", "scconline.com", "indiakanoon.org", "indiacode.nic.in", "nic.in", "wikipedia.org",
     "karnatakamedicalcouncil.com",
     # Work operations: travel booking sites
     "yatra.com", "makemytrip.com", "irctc.co.in",
