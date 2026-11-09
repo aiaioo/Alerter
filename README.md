@@ -3,13 +3,16 @@ A tool to watch my time usage and alert me when I am not making good use of my t
 # Alerter — User Manual
 
 `alerter.py` reads your Chrome, Firefox, Safari, Edge, and Internet Explorer
-browsing history and alerts you to four patterns:
+browsing history and alerts you to these patterns:
 
 - **Doom-scrolling (short-form content)** — repeated visits to one site
   spaced 0 to 10 minutes apart, sustained for more than 7 minutes.
-- **Long-form watching** — visits to one site spaced between 10 and 90
-  minutes apart, sustained for more than 1.5 hours (e.g. a long video with
-  periodic checks/comments).
+- **YouTube Shorts** — speaks an alert each time you start watching a
+  Short (URLs under `/shorts/`). Reloading the Short you're on stays silent.
+- **Long-form watching** — speaks an alert each time you start watching a
+  YouTube video (`/watch?v=...` URLs; the homepage, search and channel pages
+  don't count). Reloading or seeking in the same video stays silent; coming
+  back to it more than 30 minutes later fires again.
 - **Off-topic browsing** — any URL that isn't related to your configured
   learning goals (default: AI & programming).
 - **YouTube limit** — once you've watched more than a daily limit (default
@@ -142,12 +145,14 @@ since that's exactly what they are.
 against history pulled from an `Alerter`.
 
 ```python
-from alerter import Alerter, AlertManager, DoomScrollAlert, LongFormAlert, OffTopicAlert, YouTubeLimitAlert
+from alerter import (Alerter, AlertManager, DoomScrollAlert, LongFormAlert, OffTopicAlert,
+                     YouTubeLimitAlert, YouTubeShortAlert)
 
 alerter = Alerter()
 manager = AlertManager(alerter)
-manager.add_alert(DoomScrollAlert())
+manager.add_alert(YouTubeShortAlert())  # order matters: see "Spoken alerts"
 manager.add_alert(LongFormAlert())
+manager.add_alert(DoomScrollAlert())
 manager.add_alert(OffTopicAlert())
 manager.add_alert(YouTubeLimitAlert())
 
@@ -159,7 +164,7 @@ for name, periods in results.items():
 
 # Which alerts are firing right now? -> {name: matches}, matches being
 # whatever that alert's active_matches()/evaluate() returns.
-active_now = manager.detect_current(hours=3, recent_window=timedelta(minutes=5))
+active_now = manager.detect_current(hours=3, recent_window=timedelta(minutes=1))
 ```
 
 Each match is a `Period(domain, start, end, visit_count)`, except for
@@ -215,7 +220,8 @@ alert check, with no report.
 | Class | Trigger | Default threshold |
 |---|---|---|
 | `DoomScrollAlert` | consecutive same-site visits with gaps under `max_gap` | 0 min < gap < 10 min, sustained > 7 min |
-| `LongFormAlert` | consecutive same-site visits with gaps in a mid-range window | 10 min < gap < 90 min, sustained > 1.5 hr |
+| `YouTubeShortAlert` | each YouTube Short (`/shorts/<id>`) viewing | `rewatch_gap=30 min` |
+| `LongFormAlert` | each YouTube video (`/watch?v=<id>`) viewing | `max_gap=2 hr` (report sessions), `rewatch_gap=30 min` |
 | `OffTopicAlert` | any visited domain/page not matching your allow-list or keywords | see below |
 | `YouTubeLimitAlert` | any YouTube Shorts visit (`/shorts/...`) once today's count exceeds `daily_limit` | `daily_limit=10` |
 | `CalendarAlert` | a timed Google Calendar event starting in one of `lead_times` | `lead_times=(15, 10, 5)` minutes |
@@ -225,7 +231,8 @@ All thresholds are constructor arguments:
 
 ```python
 DoomScrollAlert(max_gap=timedelta(minutes=10), min_duration=timedelta(minutes=7))
-LongFormAlert(min_gap=timedelta(minutes=10), max_gap=timedelta(minutes=90), min_duration=timedelta(hours=1.5))
+YouTubeShortAlert(rewatch_gap=timedelta(minutes=30))
+LongFormAlert(max_gap=timedelta(hours=2), rewatch_gap=timedelta(minutes=30))
 YouTubeLimitAlert(daily_limit=10)
 CalendarAlert(google_cal, lead_times=(timedelta(minutes=15), timedelta(minutes=10), timedelta(minutes=5)))
 WakeUpAlert(arrival_time=time(8, 0), commute=timedelta(minutes=75))
@@ -257,7 +264,7 @@ lead time fired — not a fixed string like the other alerts — `CalendarAlert`
 overrides `speak_message(matches)` instead of using the shared
 `ALERT_MESSAGES` lookup. `catch_window` (default 5 minutes) controls how
 long after a trigger instant it still counts as "now"; it should be at
-least as long as how often you run the live check (e.g. the `*/5 * * * *`
+least as long as how often you run the live check (e.g. the `* * * * *`
 cron cadence below), so a trigger can't fall between two runs unnoticed.
 
 `YouTubeLimitAlert` identifies a Short by domain (`youtube.com` or
@@ -265,16 +272,18 @@ cron cadence below), so a trigger can't fall between two runs unnoticed.
 per calendar day (`visit.time.date()`), and every Short after the
 `daily_limit`-th one on a given day is flagged.
 
-**`LongFormAlert` and YouTube Shorts:** the same URL-based Short check is
-used to exclude Shorts from `LongFormAlert`'s session-building. A Short is
-simply dropped from consideration before grouping by domain and gap — it
-neither counts as long-form viewing itself, nor does it interrupt a
-long-form session in progress (the gap is measured across it, between the
-two surrounding non-Short visits). Every other domain is unaffected, since
-there's no URL-based way to tell short from long content outside YouTube.
-`DoomScrollAlert` is intentionally left untouched — a long-form YouTube
-video visit still counts towards a doom-scrolling session exactly as any
-other visit would.
+**`YouTubeShortAlert` and `LongFormAlert`:** a visit starts a new "viewing"
+only if the same video (the `/shorts/<id>` id, or the `v=` parameter of a
+`/watch` URL) wasn't visited in the previous `rewatch_gap` (default 30
+minutes). Reloads and seeks, which add history entries for the video you're
+already watching, therefore stay silent, while returning to a video later
+fires again. Swiping to a different Short, or opening a different video,
+always counts as a new viewing. `LongFormAlert` only looks at `/watch` URLs,
+so the YouTube homepage, search results, channel pages and Shorts never
+trigger it; for reports it chains `/watch` visits into sessions whose
+consecutive views are at most `max_gap` (2 hours) apart. `DoomScrollAlert`
+is untouched — YouTube visits still count towards a doom-scrolling session
+like any other visit.
 
 ### `WakeUpAlert`
 
@@ -309,7 +318,7 @@ wording, spacing, or number of stages entirely.
 
 Like `CalendarAlert`, each stage fires at most once per day (tracked in
 `wake_up_alert_state.json` next to `alerter.py`), so it won't repeat if the
-`*/5 * * * *` cron job catches the same window twice, and `speak_message`
+`* * * * *` cron job catches the same window twice, and `speak_message`
 is overridden since the message is stage-specific rather than a single
 fixed string.
 
@@ -336,8 +345,8 @@ OffTopicAlert(
 The alert is active once `min_recent_visits` (default 3) off-topic visits
 land within `lookback_window` (default 15 minutes) — a single stray
 off-topic page load won't trigger speech — provided at least one of those
-visits also falls within `active_matches()`'s `recent_window` (default 5
-minutes, matching the cron cadence). That second check means a burst of
+visits also falls within `active_matches()`'s `recent_window` (the cron
+cadence, 1 minute in `main()`). That second check means a burst of
 off-topic visits stops re-triggering once it's trailed off for more than
 `recent_window`, even if it's still within `lookback_window`.
 
@@ -377,9 +386,12 @@ class LateNightAlert(Alert):
 ## Spoken alerts
 
 `main()` calls `speak(message)`, which shells out to macOS's `say` command.
-It only speaks when **exactly one** alert is currently active, to avoid an
-ambiguous announcement when multiple conditions overlap — in that case it
-prints the list of active alerts instead of speaking.
+Calendar reminders and wake-up stages are always spoken. For the browsing
+alerts, only **one** is spoken per run: if several are active at once it
+prints the list and speaks the first in registration order. `main()`
+registers the YouTube Short and long-form alerts before doom-scrolling and
+off-topic, so those more specific alerts aren't drowned out by the broader
+ones.
 
 For live detection, `main()` calls `detect_current` with a lookback of
 "hours since midnight" (minimum 3), rather than a fixed 3 hours. A fixed
@@ -391,11 +403,16 @@ day could miss the earlier Shorts that pushed you over the limit.
 ## Running it periodically
 
 `alerter.py` runs once and exits. To get ongoing alerts, schedule it, e.g.
-with `cron` or `launchd`, every few minutes:
+with `cron` or `launchd`, every minute:
 
 ```
-*/5 * * * * /usr/bin/python3 /path/to/alerter.py >> /path/to/alerter.log 2>&1
+* * * * * /usr/bin/python3 /path/to/alerter.py >> /path/to/alerter.log 2>&1
 ```
+
+`main()` treats a browsing visit as "current" only if it happened within
+`CRON_INTERVAL` (1 minute), so each visit is announced by a single run. If
+you schedule it less often, raise `CRON_INTERVAL` to match or you'll miss
+visits.
 
 ## `googlecal.py`: Google Calendar reports
 
