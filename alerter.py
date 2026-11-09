@@ -16,7 +16,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 IS_MAC = sys.platform == "darwin"
 IS_WINDOWS = sys.platform == "win32"
@@ -417,24 +417,55 @@ class DoomScrollAlert(Alert):
         return _sessions_for_condition(candidates, lambda gap: gap < self.max_gap, self.min_duration)
 
 
+def _youtube_video_id(visit: Visit):
+    """The video id of a YouTube /watch URL, or None for any other page
+    (homepage, search results, channels, Shorts...)."""
+    if visit.domain not in YOUTUBE_DOMAINS:
+        return None
+    parsed = urlparse(visit.url)
+    if parsed.path != "/watch":
+        return None
+    return (parse_qs(parsed.query).get("v") or [None])[0]
+
+
 class LongFormAlert(Alert):
-    """b) Long-form YouTube watching: visits to non-Short YouTube URLs,
-    chained into a session as long as consecutive views are no more than
-    2 hours apart. youtube.com and m.youtube.com are treated as the same
-    site for this grouping."""
+    """b) Long-form YouTube watching: visits to /watch video URLs, chained
+    into a session as long as consecutive views are no more than 2 hours
+    apart. youtube.com and m.youtube.com are treated as the same site for
+    this grouping. Live alerts fire once per viewing: a visit to a video
+    only counts as a new viewing if the same video wasn't visited in the
+    previous `rewatch_gap` -- so reloading or seeking (new history entries
+    for the video being watched) stays silent, while coming back to it
+    later fires again."""
 
     name = "long_form"
 
-    def __init__(self, max_gap=timedelta(hours=2)):
+    def __init__(self, max_gap=timedelta(hours=2), rewatch_gap=timedelta(minutes=30)):
         self.max_gap = max_gap
+        self.rewatch_gap = rewatch_gap
+
+    def _watch_visits(self, visits):
+        return [v for v in visits if _youtube_video_id(v)]
 
     def evaluate(self, visits):
         candidates = [
             Visit(v.url, "youtube", v.time, v.title, v.browser)
-            for v in visits
-            if v.domain in YOUTUBE_DOMAINS and not _is_youtube_short(v)
+            for v in self._watch_visits(visits)
         ]
         return _sessions_for_condition(candidates, lambda gap: gap <= self.max_gap, timedelta())
+
+    def active_matches(self, visits, now=None, recent_window=timedelta(minutes=5)):
+        """One match per video whose viewing started within recent_window."""
+        now = now or datetime.now()
+        last_seen = {}
+        matches = []
+        for v in sorted(self._watch_visits(visits), key=lambda v: v.time):
+            vid = _youtube_video_id(v)
+            prev = last_seen.get(vid)
+            last_seen[vid] = v.time
+            if (prev is None or v.time - prev > self.rewatch_gap) and v.time >= now - recent_window:
+                matches.append(Period("youtube", v.time, v.time, 1))
+        return matches
 
 
 class OffTopicAlert(Alert):
@@ -559,6 +590,39 @@ class YouTubeLimitAlert(Alert):
             if counts_by_day[day] > self.daily_limit:
                 periods.append(Period(v.domain, v.time, v.time, 1))
         return periods
+
+
+def _youtube_short_id(visit: Visit):
+    """The id of a YouTube Short from its /shorts/<id> URL, or None."""
+    if not _is_youtube_short(visit):
+        return None
+    parts = urlparse(visit.url).path.split("/")
+    return parts[2] if len(parts) > 2 and parts[2] else None
+
+
+class YouTubeShortAlert(Alert):
+    """e) Fires for each YouTube Short watched. Like LongFormAlert, a visit
+    only counts as a new viewing if the same Short wasn't visited in the
+    previous `rewatch_gap`, so reloading the Short you're on stays silent."""
+
+    name = "youtube_short"
+
+    def __init__(self, rewatch_gap=timedelta(minutes=30)):
+        self.rewatch_gap = rewatch_gap
+
+    def _viewings(self, visits):
+        last_seen = {}
+        for v in sorted(visits, key=lambda v: v.time):
+            sid = _youtube_short_id(v)
+            if sid is None:
+                continue
+            prev = last_seen.get(sid)
+            last_seen[sid] = v.time
+            if prev is None or v.time - prev > self.rewatch_gap:
+                yield Period(v.domain, v.time, v.time, 1)
+
+    def evaluate(self, visits):
+        return list(self._viewings(visits))
 
 
 def _safe_fromisoformat(value: str, default: datetime) -> datetime:
@@ -982,6 +1046,7 @@ ALERT_MESSAGES = {
     "doom_scroll": "I have detected that you are doom scrolling.",
     "long_form": "I have detected that you are watching long form content.",
     "off_topic": "I have detected that you are browsing content unrelated to your work and learning goals.",
+    "youtube_short": "I have detected that you are watching a YouTube Short.",
     "youtube_limit": "I have detected that you have gone over your YouTube Shorts limit for today.",
 }
 
@@ -1026,13 +1091,22 @@ EXCLUDED_DOMAINS = {
 }
 
 
+# How often cron runs this script. Browsing alerts treat a visit as "current"
+# only if it happened within this window, so each visit is spoken about once.
+CRON_INTERVAL = timedelta(minutes=1)
+
+
 def main(period: str = None):
     """Run the live alert check. If period ('day'/'week'/'month') is given,
     also print a report over that window before checking."""
     alerter = Alerter()
     manager = AlertManager(alerter, excluded_domains=EXCLUDED_DOMAINS)
-    manager.add_alert(DoomScrollAlert())
+    # Order matters: when several browsing alerts are active at once only
+    # the first is spoken, so the YouTube alerts come before the broader
+    # doom-scroll/off-topic ones that would otherwise always shadow them.
+    manager.add_alert(YouTubeShortAlert())
     manager.add_alert(LongFormAlert())
+    manager.add_alert(DoomScrollAlert())
     manager.add_alert(OffTopicAlert())
     manager.add_alert(YouTubeLimitAlert())
 
@@ -1071,7 +1145,7 @@ def main(period: str = None):
     # few hours of it.
     now = datetime.now()
     hours_since_midnight = (now - datetime.combine(now.date(), datetime.min.time())).total_seconds() / 3600
-    active = manager.detect_current(hours=max(3, hours_since_midnight))
+    active = manager.detect_current(hours=max(3, hours_since_midnight), recent_window=CRON_INTERVAL)
     calendar_matches = active.pop("calendar", None)
     spoke_anything = False
     if calendar_matches:
