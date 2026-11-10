@@ -7,3 +7,4 @@ cron.log
 calendar_alert_state.json
 wake_up_alert_state.json
 *.txt
+spoken_alert_state.json

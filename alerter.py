@@ -1091,9 +1091,43 @@ EXCLUDED_DOMAINS = {
 }
 
 
-# How often cron runs this script. Browsing alerts treat a visit as "current"
-# only if it happened within this window, so each visit is spoken about once.
-CRON_INTERVAL = timedelta(minutes=1)
+# Browsing alerts treat a visit as "current" if it happened within this
+# window. It is wider than the 1-minute cron interval because Chrome writes
+# history to disk in batches, so a visit can appear late and would otherwise
+# be missed. Note: a visit may now be announced by up to 3 consecutive runs.
+CRON_INTERVAL = timedelta(minutes=3)
+
+
+# Alerts whose matches are individual visits, so each match is announced once.
+# With a lookback wider than the cron period a match stays "current" for
+# several runs; this state file remembers what has already been spoken.
+DEDUPED_ALERTS = {"youtube_short", "long_form", "off_topic", "youtube_limit"}
+SPOKEN_STATE_FILE = Path(__file__).resolve().parent / "spoken_alert_state.json"
+SPOKEN_RETENTION = timedelta(hours=1)
+SPOKEN_MAX_ENTRIES = 200  # hard cap, in case many alerts fire within the retention hour
+
+
+def _match_key(name, p):
+    return f"{name}|{p.domain}|{p.start.isoformat()}|{p.end.isoformat()}"
+
+
+def _load_spoken(path=SPOKEN_STATE_FILE):
+    """{key: iso time spoken}, pruned of entries older than SPOKEN_RETENTION."""
+    try:
+        state = json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return {}
+    cutoff = datetime.now() - SPOKEN_RETENTION
+    return {k: t for k, t in state.items()
+            if _safe_fromisoformat(t, datetime.now()) >= cutoff}
+
+
+def _save_spoken(state, path=SPOKEN_STATE_FILE):
+    newest = sorted(state.items(), key=lambda kv: kv[1])[-SPOKEN_MAX_ENTRIES:]
+    try:
+        Path(path).write_text(json.dumps(dict(newest)))
+    except OSError as e:
+        print(f"Warning: could not save spoken-alert state to {path}: {e}")
 
 
 def main(period: str = None):
@@ -1166,6 +1200,17 @@ def main(period: str = None):
             speak(message)
         spoke_anything = True
 
+    # Drop matches already spoken in an earlier run (the lookback window is
+    # wider than the cron period), then record whatever gets spoken below.
+    spoken = _load_spoken()
+    for name in list(active):
+        if name in DEDUPED_ALERTS:
+            fresh = [p for p in active[name] if _match_key(name, p) not in spoken]
+            if fresh:
+                active[name] = fresh
+            else:
+                del active[name]
+
     if active:
         names = list(active)
         if len(names) > 1:
@@ -1175,6 +1220,11 @@ def main(period: str = None):
         print(message)
         speak(message)
         spoke_anything = True
+        if name in DEDUPED_ALERTS:
+            now_iso = datetime.now().isoformat()
+            for p in active[name]:
+                spoken[_match_key(name, p)] = now_iso
+            _save_spoken(spoken)
 
     if not spoke_anything:
         print("No alert condition currently active.")

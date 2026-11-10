@@ -410,9 +410,12 @@ with `cron` or `launchd`, every minute:
 ```
 
 `main()` treats a browsing visit as "current" only if it happened within
-`CRON_INTERVAL` (1 minute), so each visit is announced by a single run. If
-you schedule it less often, raise `CRON_INTERVAL` to match or you'll miss
-visits.
+`CRON_INTERVAL` (3 minutes, wider than the 1-minute cron period to tolerate
+Chrome's delayed history writes). To stop a visit being announced by several
+consecutive runs, the YouTube Short, long-form, off-topic and YouTube-limit
+alerts record what they've spoken in `spoken_alert_state.json` (entries expire
+after an hour). If you schedule cron less often, raise `CRON_INTERVAL` to
+match or you'll miss visits.
 
 ## `googlecal.py`: Google Calendar reports
 
